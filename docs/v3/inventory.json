@@ -1,0 +1,402 @@
+[
+  {
+    "path": ".env.example",
+    "bytes": 922,
+    "sha256": "e28ae3cc0306b14363eff378a41c0a0aeaca623e0f3527aa6da1b74bbf9439c9"
+  },
+  {
+    "path": ".gitignore",
+    "bytes": 104,
+    "sha256": "d52bda5cc61d534898c0b8f6a8ad02fa8d0767bc5e73c1d270eb4c2e01e7b44b"
+  },
+  {
+    "path": "Bot tele.pen",
+    "bytes": 10157583,
+    "sha256": "8108c5b8ff5352e964d864e8b01ba803f7f2cf1159687216505ab88c6838703c"
+  },
+  {
+    "path": "CHANGELOG.md",
+    "bytes": 3928,
+    "sha256": "0e6fef83024176535448f09549c1c93e3fc21c7650ccc11cb5d2bbc471829b2f"
+  },
+  {
+    "path": "README.md",
+    "bytes": 9270,
+    "sha256": "3fa30e4db7b179ff9816bd45804b48cbd41c6afd0d5ecaed7c58fedaece350c6"
+  },
+  {
+    "path": "docs/Link Checker Webapp/BE/feature_landing_page_tech.md",
+    "bytes": 1886,
+    "sha256": "e5b49e235327f559f4eb73be4b1eac0a648ac6b3893e8e3b59ea948cd2c9f2f1"
+  },
+  {
+    "path": "docs/Link Checker Webapp/BE/feature_link_checker_tool_tech.md",
+    "bytes": 7094,
+    "sha256": "aa00a71d1e0fd5962a2c98d9da96a2bbb70f5ed4708dcc1181f59ecf48e35dda"
+  },
+  {
+    "path": "docs/Link Checker Webapp/BE/feature_quota_system_tech.md",
+    "bytes": 4903,
+    "sha256": "ec128c3df976152af7cdec5480ceb9c91ec73c3f9aafa7e2fae7629d0dc414f9"
+  },
+  {
+    "path": "docs/Link Checker Webapp/FE/feature_landing_page.md",
+    "bytes": 3963,
+    "sha256": "b85388fad558b5b4040d127c0ab5f2e25d1a978a31b7ccc3ab067d8e74ab685f"
+  },
+  {
+    "path": "docs/Link Checker Webapp/FE/feature_link_checker_tool.md",
+    "bytes": 3437,
+    "sha256": "0b21fd00c3e65670879bd5bed9860aced881eadbd62379d6fd330c3dccc67670"
+  },
+  {
+    "path": "docs/Link Checker Webapp/FE/feature_quota_system.md",
+    "bytes": 2934,
+    "sha256": "2874fedfb8c8e3368d826e0214eb20f5cc5712cee0554743a8da2682a5df9507"
+  },
+  {
+    "path": "docs/Link Checker Webapp/link-checker-webapp-brd.md",
+    "bytes": 2397,
+    "sha256": "b2c1a615b50d5ec46aeda0c73c1881730bf5c1e17a2bd0e8759c090eafdae6aa"
+  },
+  {
+    "path": "docs/XIAOP_V3_ROADMAP.md",
+    "bytes": 1171,
+    "sha256": "ac9f740eb0f4573a80f00830c98bb82c5e362c44f254b406056d479a94a955d3"
+  },
+  {
+    "path": "docs/architecture_backend.md",
+    "bytes": 12368,
+    "sha256": "2bad18cde0a42762bd19b90596de351ba60bba808d38e5cc292c09b69f2ccc8e"
+  },
+  {
+    "path": "docs/architecture_frontend.md",
+    "bytes": 6511,
+    "sha256": "25fe3442d5d533182b4fc6f2a9e57ed2645b46fa9a369e3e6361672cfc2b4126"
+  },
+  {
+    "path": "docs/features/BE/feature_bank_management_tech.md",
+    "bytes": 9751,
+    "sha256": "a539015f47cf25bad75936f9be9a7f47372cf9fd90bcbbaa5844cc99aeac31ab"
+  },
+  {
+    "path": "docs/features/BE/feature_customer_management_tech.md",
+    "bytes": 16537,
+    "sha256": "f09a74845535cc13ebf5c22afc51db81f25c4f9a623a5a9a10aece3e3182e559"
+  },
+  {
+    "path": "docs/features/BE/feature_discount_tech.md",
+    "bytes": 17324,
+    "sha256": "a1fe6cfdebea9096ad02c2f07f32a91a081695a46169ec1732e4d8a1691c664a"
+  },
+  {
+    "path": "docs/features/BE/feature_international_payment_tech.md",
+    "bytes": 20332,
+    "sha256": "2eac8f3b11dfcd2f65f5bb48ddfe0d8bed7fdc54c006906558dac78ed920c762"
+  },
+  {
+    "path": "docs/features/BE/feature_language_selection_tech.md",
+    "bytes": 17708,
+    "sha256": "224133f1aa4835678124272a7a5546c5aff4829413292c07ce17d4634fe784b7"
+  },
+  {
+    "path": "docs/features/BE/feature_link_checker_tech.md",
+    "bytes": 8461,
+    "sha256": "ee229d4960b5d2f4607d3cb00daae0ca0ca4988fb3b6f8d249c3c82e08626f86"
+  },
+  {
+    "path": "docs/features/BE/feature_manual_order_tech.md",
+    "bytes": 13208,
+    "sha256": "aeda0cb6ee9c25e32cb91e7da0aabec321f973c9a518e05c33a830e28c12545b"
+  },
+  {
+    "path": "docs/features/BE/feature_order_flow_tech.md",
+    "bytes": 21754,
+    "sha256": "86c9999d5b7f448c1206934267c7edf89efd45043fbcee9cae0d859c9281f23d"
+  },
+  {
+    "path": "docs/features/BE/feature_order_management_tech.md",
+    "bytes": 10981,
+    "sha256": "ebc3806fe9c177f55e59d095ad8d6bed055a4dfb1fdbe9d31d83247e261c6e4f"
+  },
+  {
+    "path": "docs/features/BE/feature_products_tech.md",
+    "bytes": 16179,
+    "sha256": "c538540fd7f470748a4318eeeb373954d07cc38ed6dc1dbd226e30a736021a58"
+  },
+  {
+    "path": "docs/features/BE/feature_rbac_tech.md",
+    "bytes": 21360,
+    "sha256": "94742bc43b0c124b1869eb89d9c81d263096d24abb56ed0e71e0e476511b7d1a"
+  },
+  {
+    "path": "docs/features/BE/feature_settings_tech.md",
+    "bytes": 10423,
+    "sha256": "d6fe3395453d14c53733511b329f1d8fc928b9776de696802d123816577deaa6"
+  },
+  {
+    "path": "docs/features/BE/feature_shop_activation_tech.md",
+    "bytes": 14803,
+    "sha256": "f6f04fa664a35aeb5f0c0e6578796a40d0ba63563dd65e024112d2fe90219a86"
+  },
+  {
+    "path": "docs/features/FE/feature_bank_management.md",
+    "bytes": 12619,
+    "sha256": "1919a3289f2f6f2e45cc3fdd0f0f94a5389c06e6e76a83dec31412d96afa644d"
+  },
+  {
+    "path": "docs/features/FE/feature_customer_management.md",
+    "bytes": 18744,
+    "sha256": "c7e66bfa0a2b6d123ea1c9d0f8e673d4c3f511a758d7eccba118d8c60c79c719"
+  },
+  {
+    "path": "docs/features/FE/feature_discount.md",
+    "bytes": 23141,
+    "sha256": "694239dfcde0cc1e518cc4d4d728ca50c5a362daf18a6bfb12fce3f98b0ff776"
+  },
+  {
+    "path": "docs/features/FE/feature_international_payment.md",
+    "bytes": 26309,
+    "sha256": "da84bfffedad9f741dafdb4acef9a2768bee248a8ae5317c3697dc2ce2b0c058"
+  },
+  {
+    "path": "docs/features/FE/feature_language_selection.md",
+    "bytes": 17635,
+    "sha256": "efade7fae11a9a57a6a1578313a2ea83de9a86ded39aede58c1418d0e4ec291e"
+  },
+  {
+    "path": "docs/features/FE/feature_link_checker.md",
+    "bytes": 14767,
+    "sha256": "ceb48e493573db29c6f1fb7d2242ed9aa6c6073d24bed7ec598ae336aee07101"
+  },
+  {
+    "path": "docs/features/FE/feature_manual_order.md",
+    "bytes": 13482,
+    "sha256": "48333cc4b69dd722b65d6089fbf3818a5e036ee5950049fc03fef2fa00ac5bb6"
+  },
+  {
+    "path": "docs/features/FE/feature_order_flow.md",
+    "bytes": 41890,
+    "sha256": "50d8a7da017869ed80e4fd0ed3da57813a22f1ac7cbb83e3432230481466026e"
+  },
+  {
+    "path": "docs/features/FE/feature_order_management.md",
+    "bytes": 15300,
+    "sha256": "08d216445a4b4763ea08eaa7d5f8fc9a6c3ee1c49d19af55594706c52a9212b9"
+  },
+  {
+    "path": "docs/features/FE/feature_products.md",
+    "bytes": 20304,
+    "sha256": "423efd312c36bb56a8769c258f6b4ce1612e6761cdb06827db4bd68d7ecbd266"
+  },
+  {
+    "path": "docs/features/FE/feature_rbac.md",
+    "bytes": 23916,
+    "sha256": "f1d959168912add50facafa47c92a1b56a2cb610fb22d472675c32e055ce44b0"
+  },
+  {
+    "path": "docs/features/FE/feature_settings.md",
+    "bytes": 23410,
+    "sha256": "73dabe22141aa55bb61e992bb9c72bcadc37e81f34162c9d98302ada16cc33f8"
+  },
+  {
+    "path": "docs/features/FE/feature_shop_activation.md",
+    "bytes": 26078,
+    "sha256": "9b27ebe562586053fbecd1eb5c97a7e7751bc8c7bbcaafcaaf4f0246f6859004"
+  },
+  {
+    "path": "docs/telegram-sales-bot-brd.md",
+    "bytes": 11394,
+    "sha256": "66b876c8849966d7081960dc7124e9a2aa09bf7d84964e71798a64124763ad45"
+  },
+  {
+    "path": "docs/telegram-sales-bot-prd.md",
+    "bytes": 14277,
+    "sha256": "00dd2004820fe36e42f872189df5e6a39125ba4dca698872fa22f0589f8c8cf7"
+  },
+  {
+    "path": "docs/telegram-sales-bot-roadmap.md",
+    "bytes": 6345,
+    "sha256": "47af20f86afac77859402b8aa956f22e3ec72ceb90cdd63216f12f5c8caa22b9"
+  },
+  {
+    "path": "docs/telegram-sales-bot-tdd.md",
+    "bytes": 14247,
+    "sha256": "50e157a387927b7f15d555232f0fc33a2eb645244333d4806e6554fd1bdf77fd"
+  },
+  {
+    "path": "package-lock.json",
+    "bytes": 184487,
+    "sha256": "5dee0fe40ec184a9a313f82cc41058d81755226354a625d3e6154073e20dfb7a"
+  },
+  {
+    "path": "package.json",
+    "bytes": 673,
+    "sha256": "5d262ebbba010dc6777814ea99fe3657efdadecef8c7ee115a9d606e8ef580d4"
+  },
+  {
+    "path": "public/admin.html",
+    "bytes": 144133,
+    "sha256": "20c3c8433544bc0815ef7e9927faeacb415721e25ff107bae366df55b91a9bc8"
+  },
+  {
+    "path": "public/checker.html",
+    "bytes": 24125,
+    "sha256": "37f3f2879bea1f820c53443ded0a2a09203cf76fcee0f55858d846cc1eb807e0"
+  },
+  {
+    "path": "railway.json",
+    "bytes": 260,
+    "sha256": "c1402683db078c86f83481c2be6229c20b6e561a1f3c2d08e688726dfa429a9f"
+  },
+  {
+    "path": "src/bot.js",
+    "bytes": 7364,
+    "sha256": "b80a090b06488b060bf54768cf15be3f1ea9ab0a6ed81c7ee8d5b476b72a146b"
+  },
+  {
+    "path": "src/config.js",
+    "bytes": 2541,
+    "sha256": "9df40940d803a74a0bf9421f28dc43dc085a8c8895d64c1cee0f0ecaa4a767e8"
+  },
+  {
+    "path": "src/database.js",
+    "bytes": 78674,
+    "sha256": "326479e3ca0672dd3402a6e3c11562fb6644635ece72069bbaec1f21c3aa0aa7"
+  },
+  {
+    "path": "src/handlers/adminAPI.js",
+    "bytes": 56691,
+    "sha256": "131b7e329bb93c8997562dd202e0d3cb750f5482990f29509b1b5b56129caf9f"
+  },
+  {
+    "path": "src/handlers/adminHandler.js",
+    "bytes": 22883,
+    "sha256": "c50e06257f4cfcee99ac1258aabb0a9510fb93eac9e6a72a3703d80f3cf76f2d"
+  },
+  {
+    "path": "src/handlers/callbacks.js",
+    "bytes": 1451,
+    "sha256": "430ff9e03b6f58816bee2c6beece2d4182cbbbb10054244668a1b1335c73cae8"
+  },
+  {
+    "path": "src/handlers/cartHandler.js",
+    "bytes": 9208,
+    "sha256": "b9706d431230288b0cb1925365eff4a93dc8cec024fcf4f7c78ef99f83d3c369"
+  },
+  {
+    "path": "src/handlers/checkerAPI.js",
+    "bytes": 6796,
+    "sha256": "9f35a1558ddafc0bd8d4586e65ad72d5dfdcd3d0584e0b35d351f68cc7dabc47"
+  },
+  {
+    "path": "src/handlers/currencyHandler.js",
+    "bytes": 6295,
+    "sha256": "df341ef98b50861307fb0835c442aa75ecb7d0b2e409e6fec2d35fd8d6f9f2e8"
+  },
+  {
+    "path": "src/handlers/deliveryHandler.js",
+    "bytes": 15451,
+    "sha256": "3cffaf791f37fdc8c9c313a2e4929b206c441c71cdc4d47b745a12d1f7ea31e5"
+  },
+  {
+    "path": "src/handlers/discountHandler.js",
+    "bytes": 18876,
+    "sha256": "ba44f6c3b16cc688bc25ff4f91cbdbf91d32794e753945c415ec971cb7c48c95"
+  },
+  {
+    "path": "src/handlers/emailHandler.js",
+    "bytes": 5478,
+    "sha256": "aaeee629968b34457f36137c4753797ea7b5aa32c9f9e69b08cbc7ad138d72be"
+  },
+  {
+    "path": "src/handlers/helpHandler.js",
+    "bytes": 4047,
+    "sha256": "43b8732e9a14130d4b1f971e995243c2799e6ba067c5d99dd43da623b264d2cb"
+  },
+  {
+    "path": "src/handlers/menuHandler.js",
+    "bytes": 13518,
+    "sha256": "82ea40c39cece30080e09761b61ffcdb90e6af929b7baa8c0ddc7eb9ff49e799"
+  },
+  {
+    "path": "src/handlers/orderHandler.js",
+    "bytes": 31973,
+    "sha256": "fe5e64df22064d73be721ce9a02669c6644ec642c6259e26339f3690c477aca0"
+  },
+  {
+    "path": "src/handlers/productHandler.js",
+    "bytes": 15895,
+    "sha256": "03a4e799f9790a56089d86f82bb44005248dd43122249b8209fe42bc0e00736b"
+  },
+  {
+    "path": "src/handlers/profileHandler.js",
+    "bytes": 1784,
+    "sha256": "059773b5a6593c852942c6d4d39216a4de386b93a30a7e8ec1843c0b3cf842f6"
+  },
+  {
+    "path": "src/handlers/quantityHandler.js",
+    "bytes": 7199,
+    "sha256": "1f57abcb4d168d4101a2909bbeab30912854c5e2eb5e564e24891582ba783f38"
+  },
+  {
+    "path": "src/handlers/webhookHandler.js",
+    "bytes": 5585,
+    "sha256": "c16af3f7fef6e31e40fd1d72f3436b63fc61057a7448622ee0b5fa3fa2413303"
+  },
+  {
+    "path": "src/locales/en.js",
+    "bytes": 10896,
+    "sha256": "e75e3257a5b9bbc84846964ba4d7505f5e6334335770e3bd3aaa2e0177105de2"
+  },
+  {
+    "path": "src/locales/index.js",
+    "bytes": 2630,
+    "sha256": "9edb32acd513bdda23fef982ab81d9d899ea19abe4d3143b612eb84a5d572a4a"
+  },
+  {
+    "path": "src/locales/vi.js",
+    "bytes": 12077,
+    "sha256": "b51d79489ef0b56b823bbdd023638ffab43d9bb94774b4d7b4e35b1de5b86e40"
+  },
+  {
+    "path": "src/scheduler.js",
+    "bytes": 2580,
+    "sha256": "960679357f12d3d6d711fb4bba5b917744160a3920ae47676c3be42f679d83ec"
+  },
+  {
+    "path": "src/seed.js",
+    "bytes": 3615,
+    "sha256": "5e8af19256c80626fea0ce70d822c0a0126f9de92895ba97b9eecf8557b668a5"
+  },
+  {
+    "path": "src/utils/linkChecker.js",
+    "bytes": 33635,
+    "sha256": "da39831cc0ffee8b47edc8f1e8ef0182afb437b9e9b148755911f3326c10236d"
+  },
+  {
+    "path": "src/utils/orderExpiry.js",
+    "bytes": 2177,
+    "sha256": "f0edb7c712cc16d637c729419106618db9e4c5ee454419163a4fa2dee86f527e"
+  },
+  {
+    "path": "src/utils/sepayPoller.js",
+    "bytes": 8360,
+    "sha256": "ab1a0283870d15b37dee887bfd51211986f0869ad01f42b7ef21c1d0ecba42c0"
+  },
+  {
+    "path": "src/utils/vietqr.js",
+    "bytes": 755,
+    "sha256": "c53981224bb3f88cd21340b082c3d042e6aa53976377f3e5d023fb755a1fe7e7"
+  },
+  {
+    "path": "tests/phase1-features.test.js",
+    "bytes": 22415,
+    "sha256": "e03e955c4fd764a5478783b05945e586110f13e673a2fed9f1ddf44a1feb9a6d"
+  },
+  {
+    "path": "vitest.config.js",
+    "bytes": 151,
+    "sha256": "e8c5a9d8f0c11cb2e9702fab3c7c10bb7860eb64d2e5ce41e59a054467eb954c"
+  }
+]
