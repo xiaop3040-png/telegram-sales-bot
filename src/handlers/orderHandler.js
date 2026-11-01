@@ -25,7 +25,9 @@ function setupOrderHandler(bot) {
         } else {
             // Single method — skip selection, use default
             data.paymentMethod = methods.length === 1 ? methods[0].id : 'vietqr';
-            createOrder(bot, data);
+            if (data.paymentMethod === 'usdt') createOrderUsdt(bot, data);
+            else if (data.paymentMethod === 'paypal') createOrderPaypal(bot, data);
+            else createOrder(bot, data);
         }
     });
 
@@ -522,7 +524,7 @@ function cancelOrder(bot, chatId, messageId, orderCode, userId = null) {
     const lang = userId ? getLang(userId, db.getUserLanguage) : 'vi';
     const order = db.getOrderByCode(orderCode);
 
-    if (!order) {
+    if (!order || !userId || order.telegram_user_id !== userId || chatId !== userId) {
         bot.sendMessage(chatId, t('order_not_found', lang));
         return;
     }
@@ -648,7 +650,7 @@ function showOrderDetail(bot, chatId, messageId, orderCode, userId = null) {
     const lang = userId ? getLang(userId, db.getUserLanguage) : 'vi';
     const order = db.getOrderByCode(orderCode);
 
-    if (!order) {
+    if (!order || !userId || order.telegram_user_id !== userId || chatId !== userId) {
         const text = t('order_not_found', lang);
         if (messageId) {
             bot.editMessageText(text, {

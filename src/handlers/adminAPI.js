@@ -7,16 +7,13 @@ const { deliverCredentials } = require('./deliveryHandler');
  * All routes prefixed with /api/admin
  */
 function setupAdminAPI(app, bot) {
-    // Auth middleware
-    const authMiddleware = (req, res, next) => {
-        const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-        if (apiKey !== config.adminApiKey) {
-            return res.status(401).json({ error: true, message: 'Unauthorized', code: 'UNAUTHORIZED' });
-        }
-        next();
-    };
+    app.use('/api/admin', require('../security/admin').adminGuard());
 
-    app.use('/api/admin', authMiddleware);
+    app.get('/api/admin/audit-events', (req,res) => {
+        const stmt = db.getDb().prepare('SELECT * FROM audit_events ORDER BY id DESC LIMIT 500');
+        const result = []; try { while(stmt.step()) result.push(stmt.getAsObject()); } finally { stmt.free(); }
+        res.json(result);
+    });
 
     // ==================== Dashboard ====================
 
@@ -730,7 +727,7 @@ function setupAdminAPI(app, bot) {
             const filters = {};
             if (req.query.source) filters.source = req.query.source;
             if (req.query.source_channel) filters.source_channel = req.query.source_channel;
-            res.json(db.getRecentOrders(100, filters));
+            res.json(db.getRecentOrders(1000, filters));
         } catch (err) {
             res.status(500).json({ error: true, message: err.message, code: 'INTERNAL_ERROR' });
         }
@@ -748,7 +745,7 @@ function setupAdminAPI(app, bot) {
             if (order.status === 'cancelled') {
                 return res.status(400).json({ error: true, message: 'Order was cancelled', code: 'CANCELLED' });
             }
-            db.updateOrderStatus(req.params.code, 'paid');
+            require('../services/payments').confirmManual(req.params.code, 'admin-api');
 
             if (bot) {
                 const delivered = await deliverCredentials(bot, order);
@@ -786,7 +783,7 @@ function setupAdminAPI(app, bot) {
             if (order.status !== 'paid' && order.status !== 'delivering') {
                 return res.status(400).json({ error: true, message: `Order status is ${order.status}, expected paid/delivering`, code: 'INVALID_STATUS' });
             }
-            db.updateOrderStatus(req.params.code, 'delivered');
+            require('./deliveryHandler').completeManual(req.params.code, 'admin-api');
 
             // Notify customer via Telegram
             if (bot) {
@@ -886,56 +883,9 @@ function setupAdminAPI(app, bot) {
                 return res.status(500).json({ error: true, message: 'Bot not initialized', code: 'BOT_ERROR' });
             }
 
-            const product = db.getProductById(order.product_id);
-            const productType = product ? product.product_type : 'credential';
-
-            if (productType !== 'credential') {
-                return res.status(400).json({ error: true, message: `Resend only works for credential-type products`, code: 'INVALID_TYPE' });
-            }
-
-            // Get credentials linked to this order
-            const d = db.getDb();
-            const stmt = d.prepare('SELECT * FROM credentials WHERE order_id = ?');
-            stmt.bind([order.id]);
-            const credentials = [];
-            while (stmt.step()) credentials.push(stmt.getAsObject());
-            stmt.free();
-
-            if (credentials.length === 0) {
-                return res.status(400).json({ error: true, message: 'No credentials found for this order', code: 'NO_CREDENTIALS' });
-            }
-
-            // Build and send credential message
-            const fields = product ? JSON.parse(product.credential_fields || '[]') : [];
-            let text = `🔄 **GỬI LẠI — ĐƠN #${order.order_code}**\n\n`;
-            text += `📦 Sản phẩm: ${order.product_name}\n`;
-            text += `🔢 Số lượng: ${order.quantity}\n\n`;
-            text += `━━━━━━━━━━━━━━━━━━\n`;
-            text += `📋 **THÔNG TIN TÀI KHOẢN:**\n\n`;
-
-            for (let i = 0; i < credentials.length; i++) {
-                const cred = credentials[i];
-                const data = typeof cred.data === 'string' ? JSON.parse(cred.data) : (cred.data || {});
-                text += `━━━ Tài khoản ${i + 1} ━━━\n`;
-                for (const field of fields) {
-                    if (data[field.key]) {
-                        text += `${field.icon || '📋'} ${field.label}: \`${data[field.key]}\`\n`;
-                    }
-                }
-                text += '\n';
-            }
-            text += `━━━━━━━━━━━━━━━━━━\n`;
-            text += `⚠️ Lưu ý: Vui lòng đổi mật khẩu sau khi nhận tài khoản.`;
-
-            await bot.sendMessage(order.telegram_user_id, text, { parse_mode: 'Markdown' });
-
-            // Mark as delivered after successful resend
-            db.updateOrderStatus(req.params.code, 'delivered');
-            if (product && product.subscription_days && !order.subscription_expires_at) {
-                db.setSubscriptionExpiry(req.params.code, product.subscription_days);
-            }
-
-            res.json({ message: `Resent ${credentials.length} credentials to customer` });
+            if (order.status === 'delivered') return res.status(409).json({message:'Already delivered; use existing private message'});
+            const delivered = await deliverCredentials(bot, order, { retry: true });
+            res.json({ delivered, message: delivered ? 'Delivered' : 'Delivery requires review' });
         } catch (err) {
             res.status(500).json({ error: true, message: err.message, code: 'INTERNAL_ERROR' });
         }

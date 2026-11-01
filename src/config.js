@@ -24,12 +24,6 @@ if (envFile) {
   console.log('ℹ️  No .env file found, using system environment variables');
 }
 
-// Log masked token for verification
-const tokenPreview = process.env.BOT_TOKEN
-  ? `${process.env.BOT_TOKEN.slice(0, 6)}...${process.env.BOT_TOKEN.slice(-4)}`
-  : 'NOT SET';
-console.log(`🔑 Bot token: ${tokenPreview} (${isDev ? 'DEV' : 'PROD'})`);
-
 const config = {
   // Telegram Bot
   botToken: process.env.BOT_TOKEN,
@@ -46,10 +40,12 @@ const config = {
 
   // SePay
   sepayApiKey: process.env.SEPAY_API_KEY,
+  sepayWebhookKey: process.env.SEPAY_WEBHOOK_KEY,
+  telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
   sepayVaName: process.env.SEPAY_VA_NAME || '',
 
   // Admin Panel
-  adminApiKey: process.env.ADMIN_API_KEY || process.env.SEPAY_API_KEY,
+  adminApiKey: process.env.ADMIN_API_KEY,
 
   // Server
   port: parseInt(process.env.PORT) || 3000,
@@ -59,14 +55,18 @@ const config = {
   orderExpiryMinutes: parseInt(process.env.ORDER_EXPIRY_MINUTES) || 5,
 
   // Support (configurable per instance)
-  supportUsername: process.env.SUPPORT_USERNAME || '@maingocanh',
-  supportUrl: `https://t.me/${(process.env.SUPPORT_USERNAME || '@maingocanh').replace('@', '')}`,
+  supportUsername: process.env.SUPPORT_USERNAME || '@xiaop3040',
+  supportUrl: `https://t.me/${(process.env.SUPPORT_USERNAME || '@xiaop3040').replace('@', '')}`,
 };
 
 // Startup validation
 function validateConfig() {
   const required = [
     ['BOT_TOKEN', config.botToken],
+    ['ADMIN_API_KEY', config.adminApiKey?.length >= 32],
+    ['SEPAY_WEBHOOK_KEY', config.sepayWebhookKey?.length >= 32],
+    ['DATA_ENCRYPTION_KEY', /^[a-f0-9]{64}$/i.test(process.env.DATA_ENCRYPTION_KEY || '')],
+    ['TELEGRAM_WEBHOOK_SECRET', /^[A-Za-z0-9_-]{32,256}$/.test(config.telegramWebhookSecret || '')],
     ['ADMIN_TELEGRAM_ID', config.adminTelegramId],
     ['BANK_CODE', config.bank.code],
     ['BANK_ACCOUNT_NO', config.bank.accountNo],

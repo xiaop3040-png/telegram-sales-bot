@@ -313,7 +313,7 @@ describe('Manual Orders — updateManualOrder', () => {
         }
     });
 
-    it('T22: should rollback credentials when cancelling paid order', () => {
+    it('T22: should quarantine credentials when cancelling paid order', () => {
         // Create + pay another manual order
         const r = db.createManualOrder({
             sourceChannel: 'zalo',
@@ -325,7 +325,7 @@ describe('Manual Orders — updateManualOrder', () => {
         // Cancel it → credentials should be rolled back
         db.updateManualOrder(r.orderCode, { status: 'cancelled' });
         const stockAfterCancel = db.getStockCount(catProductId2);
-        expect(stockAfterCancel).toBe(stockAfterPaid + 1);
+        expect(stockAfterCancel).toBe(stockAfterPaid);
     });
 });
 
@@ -345,7 +345,7 @@ describe('Manual Orders — deleteManualOrder', () => {
         expect(order.is_deleted).toBe(1);
     });
 
-    it('T24: should rollback credentials on delete of paid order', () => {
+    it('T24: should quarantine credentials on delete of paid order', () => {
         const catProductId3 = db.addProduct('SP Delete Test', 20000, '', '', null, null, 'credential');
         db.addCredential(catProductId3, { username: 'del_user', password: 'del_pass' });
 
@@ -359,7 +359,7 @@ describe('Manual Orders — deleteManualOrder', () => {
 
         db.deleteManualOrder(r.orderCode);
         const stockAfterDelete = db.getStockCount(catProductId3);
-        expect(stockAfterDelete).toBe(1); // credential rolled back
+        expect(stockAfterDelete).toBe(0); // allocated credentials must not be resold
     });
 
     it('T25: should throw NOT_MANUAL_ORDER for bot orders', () => {
