@@ -65,7 +65,14 @@ async function main() {
 
     // 6. Setup Express server
     const app = express();
-    app.use(express.json());
+    app.disable('x-powered-by');
+    app.use((req, res, next) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('X-Frame-Options', 'DENY');
+        next();
+    });
+    app.use(express.json({ limit: '128kb' }));
 
     // Health check
     app.get('/', (req, res) => {
