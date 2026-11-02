@@ -1,0 +1,282 @@
+import { beforeAll, afterAll, describe, it, expect, vi } from "vitest";
+import { createRequire } from "node:module";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+const require = createRequire(import.meta.url);
+let db, payments, delivery, config, server, url, productId;
+const folder = fs.mkdtempSync(path.join(os.tmpdir(), "shopbot-v3-"));
+const bot = { sendMessage: vi.fn(async () => ({ message_id: 1 })) };
+function makeOrder(options = {}) {
+  return db.createOrder({
+    telegramUserId: 42,
+    telegramUsername: "customer",
+    productId,
+    productName: "Authorized digital product",
+    quantity: 1,
+    unitPrice: 100,
+    totalAmount: 100,
+    qrUrl: "",
+    expiresAt: new Date(Date.now() + 600000).toISOString(),
+    ...options,
+  });
+}
+function payload(code, id = 1) {
+  return {
+    id,
+    transferType: "in",
+    transferAmount: 100,
+    accountNumber: "123456",
+    content: code,
+  };
+}
+async function post(body, authorization = `Apikey ${config.sepayWebhookKey}`) {
+  return fetch(url + "/webhook/sepay", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authorization,
+    },
+    body: JSON.stringify(body),
+  });
+}
+beforeAll(async () => {
+  process.env.DB_PATH = path.join(folder, "test.db");
+  process.env.DATA_ENCRYPTION_KEY = "a".repeat(64);
+  process.env.ADMIN_API_KEY = "b".repeat(32);
+  process.env.SEPAY_WEBHOOK_KEY = "c".repeat(32);
+  process.env.BANK_ACCOUNT_NO = "123456";
+  db = require("../src/database");
+  await db.initDatabase();
+  config = require("../src/config");
+  payments = require("../src/services/payments");
+  delivery = require("../src/handlers/deliveryHandler");
+  productId = db.addProduct("Authorized digital product", 100);
+  for (let i = 0; i < 20; i++)
+    db.addCredential(productId, { username: "u" + i, password: "secret-" + i });
+  const express = require("express");
+  const app = express();
+  app.use(express.json({ limit: "128kb" }));
+  require("../src/handlers/webhookHandler").setupWebhookHandler(app, bot);
+  require("../src/handlers/adminAPI").setupAdminAPI(app, bot);
+  server = app.listen(0, "127.0.0.1");
+  await new Promise((r) => server.once("listening", r));
+  url = "http://127.0.0.1:" + server.address().port;
+});
+afterAll(async () => {
+  await new Promise((r) => server.close(r));
+  fs.rmSync(folder, { recursive: true, force: true });
+});
+describe("SePay HTTP boundary", () => {
+  it("rejects forged webhook without changing order", async () => {
+    const code = makeOrder();
+    expect((await post(payload(code), "bad")).status).toBe(401);
+    expect(db.getOrderByCode(code).status).toBe("pending");
+  });
+  it("fails closed when webhook secret missing", async () => {
+    const old = config.sepayWebhookKey;
+    config.sepayWebhookKey = "";
+    expect((await post({})).status).toBe(503);
+    config.sepayWebhookKey = old;
+  });
+  it("ignores wrong destination, malformed amount, ambiguous code and outgoing payment", async () => {
+    const code = makeOrder();
+    for (const change of [
+      { accountNumber: "wrong" },
+      { transferAmount: "bad" },
+      { transferAmount: true },
+      { transferAmount: 99 },
+      { transferType: "out" },
+      { content: code + "9" },
+      { content: code + " ORD1234567890123" },
+    ]) {
+      await post({ ...payload(code, 2), ...change });
+      expect(db.getOrderByCode(code).status).toBe("pending");
+    }
+  });
+  it("deduplicates concurrent webhooks and poller across database reopen", async () => {
+    const code = makeOrder();
+    bot.sendMessage.mockClear();
+    await Promise.all([post(payload(code, 100)), post(payload(code, 100))]);
+    expect(db.getOrderByCode(code).status).toBe("delivered");
+    expect(bot.sendMessage).toHaveBeenCalledTimes(1);
+    await db.initDatabase();
+    const next = makeOrder();
+    const result = payments.accept(
+      payments.normalize(
+        {
+          id: "100",
+          transaction_type: "in",
+          amount_in: "100",
+          account_number: "123456",
+          transaction_content: next,
+        },
+        "poller",
+      ),
+    );
+    expect(result.reason).toBe("duplicate");
+    expect(db.getOrderByCode(next).status).toBe("pending");
+  });
+  it("leaves late payments for review", () => {
+    const code = makeOrder({ expiresAt: new Date(0).toISOString() });
+    expect(
+      payments.accept(payments.normalize(payload(code, 101), "webhook")).reason,
+    ).toBe("expired");
+  });
+});
+describe("Allocation and durable delivery", () => {
+  it("allocates unique credentials before concurrent network sends", async () => {
+    const a = makeOrder(),
+      b = makeOrder();
+    payments.confirmManual(a, "test");
+    payments.confirmManual(b, "test");
+    let release;
+    const gate = new Promise((r) => (release = r));
+    const slow = {
+      sendMessage: vi.fn(async () => {
+        await gate;
+        return { message_id: 7 };
+      }),
+    };
+    const first = delivery.deliverCredentials(slow, db.getOrderByCode(a));
+    const second = delivery.deliverCredentials(slow, db.getOrderByCode(b));
+    const assigned = db
+      .getDb()
+      .exec("SELECT order_id,id FROM credentials WHERE order_id IN (?,?)", [
+        db.getOrderByCode(a).id,
+        db.getOrderByCode(b).id,
+      ])[0].values;
+    expect(assigned).toHaveLength(2);
+    expect(new Set(assigned.map((x) => x[1])).size).toBe(2);
+    release();
+    await Promise.all([first, second]);
+  });
+  it("failed Telegram send retains allocation and explicit retry reuses it", async () => {
+    const code = makeOrder();
+    payments.confirmManual(code, "test");
+    const stock = db.getStockCount(productId);
+    await delivery.deliverCredentials(
+      {
+        sendMessage: vi.fn(async () => {
+          throw new Error("timeout");
+        }),
+      },
+      db.getOrderByCode(code),
+    );
+    expect(db.getStockCount(productId)).toBe(stock - 1);
+    expect(db.getOrderByCode(code).status).toBe("delivering");
+    const before = bot.sendMessage.mock.calls.length;
+    await delivery.deliverCredentials(bot, db.getOrderByCode(code));
+    expect(bot.sendMessage.mock.calls.length).toBe(before + 1); // admin review notification only
+    await delivery.deliverCredentials(bot, db.getOrderByCode(code), {
+      retry: true,
+    });
+    expect(db.getStockCount(productId)).toBe(stock - 1);
+    expect(db.getOrderByCode(code).status).toBe("delivered");
+  });
+  it("delivers each cart product with its own allocation", async () => {
+    const p = db.addProduct("Cloud license", 50);
+    db.addCredential(p, { username: "cloud", password: "cloud-secret" });
+    const code = db.createOrderWithItems(
+      {
+        telegramUserId: 42,
+        telegramUsername: "customer",
+        totalAmount: 150,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+      },
+      [
+        {
+          productId,
+          productName: "digital",
+          quantity: 1,
+          unitPrice: 100,
+          subtotal: 100,
+        },
+        {
+          productId: p,
+          productName: "Cloud license",
+          quantity: 1,
+          unitPrice: 50,
+          subtotal: 50,
+        },
+      ],
+    );
+    payments.confirmManual(code, "test");
+    bot.sendMessage.mockClear();
+    await delivery.deliverCredentials(bot, db.getOrderByCode(code));
+    expect(bot.sendMessage).toHaveBeenCalledTimes(2);
+    expect(db.getOrderByCode(code).status).toBe("delivered");
+    expect(db.getStockCount(p)).toBe(0);
+  });
+  it("rolls back memory and disk on snapshot rename failure", async () => {
+    const code = makeOrder();
+    const old = fs.readFileSync(process.env.DB_PATH);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("disk failure");
+    });
+    expect(() =>
+      payments.accept(payments.normalize(payload(code, 303), "webhook")),
+    ).toThrow("disk failure");
+    spy.mockRestore();
+    expect(db.getOrderByCode(code).status).toBe("pending");
+    expect(fs.readFileSync(process.env.DB_PATH).equals(old)).toBe(true);
+    expect(
+      payments.accept(payments.normalize(payload(code, 303), "webhook"))
+        .accepted,
+    ).toBe(true);
+  });
+  it("encrypts stored credentials and rejects tampering", () => {
+    const bytes = fs.readFileSync(process.env.DB_PATH);
+    expect(bytes.includes(Buffer.from("secret-"))).toBe(false);
+    expect(bytes.subarray(0, 6).toString()).toBe("XPSB3\0");
+    const tampered = Buffer.from(bytes);
+    tampered[tampered.length - 1] ^= 1;
+    expect(() =>
+      require("../src/security/snapshot").decode(tampered),
+    ).toThrow();
+  });
+  it("rejects invalid state transitions and negative quantities", () => {
+    const code = makeOrder();
+    db.updateOrderStatus(code, "cancelled");
+    expect(() => db.updateOrderStatus(code, "paid")).toThrow();
+    expect(() => db.addToCart(42, productId, -1)).toThrow();
+    expect(() => makeOrder({ quantity: -1 })).toThrow();
+  });
+});
+describe("Admin authorization", () => {
+  it("rejects missing key including absent server configuration and query-string auth", async () => {
+    expect((await fetch(url + "/api/admin/dashboard")).status).toBe(401);
+    expect(
+      (await fetch(url + "/api/admin/dashboard?apiKey=" + config.adminApiKey))
+        .status,
+    ).toBe(401);
+    const old = config.adminApiKey;
+    config.adminApiKey = undefined;
+    expect((await fetch(url + "/api/admin/dashboard")).status).toBe(401);
+    config.adminApiKey = old;
+  });
+  it("accepts header key, avoids caching, records audit without secrets", async () => {
+    const res = await fetch(url + "/api/admin/dashboard", {
+      headers: { "x-api-key": config.adminApiKey },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const audit = await (
+      await fetch(url + "/api/admin/audit-events", {
+        headers: { "x-api-key": config.adminApiKey },
+      })
+    ).json();
+    expect(audit.length).toBeGreaterThan(0);
+    expect(JSON.stringify(audit)).not.toContain(config.adminApiKey);
+  });
+  it("rate limits spoofed forwarded IPs", async () => {
+    let status;
+    for (let i = 0; i < 125; i++)
+      status = (
+        await fetch(url + "/api/admin/dashboard", {
+          headers: { "x-forwarded-for": `10.0.0.${i}` },
+        })
+      ).status;
+    expect(status).toBe(429);
+  });
+});

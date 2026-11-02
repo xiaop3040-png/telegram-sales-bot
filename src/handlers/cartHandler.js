@@ -27,6 +27,7 @@ function setupCartHandler(bot) {
             const cart = db.getCart(userId);
             const item = cart.find(i => i.product_id === productId);
             if (item) {
+                if (item.quantity >= 999) return;
                 db.updateCartQty(userId, productId, item.quantity + 1);
             }
             showCart(bot, chatId, messageId, userId);
@@ -85,7 +86,7 @@ function setupCartHandler(bot) {
                 bot.answerCallbackQuery(query.id, { text: '❌' });
                 return;
             }
-            db.addToCart(userId, productId, qty);
+            try { db.addToCart(userId, productId, qty); } catch { bot.answerCallbackQuery(query.id,{text:'Invalid quantity / Số lượng không hợp lệ'}).catch(()=>{}); return; }
             const cartCount = db.getCartCount(userId);
             bot.answerCallbackQuery(query.id, {
                 text: t('cart_added', lang, { product: product.name, qty }),

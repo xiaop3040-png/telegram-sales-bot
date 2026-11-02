@@ -6,6 +6,10 @@ const { checkLinks, getCachedResult, getCacheStats } = require('../utils/linkChe
  */
 function setupCheckerAPI(app) {
 
+    app.use('/api/checker', (req,res,next) => {
+        if (process.env.ENABLE_LINK_CHECKER !== 'true') return res.status(403).json({message:'Checker disabled'});
+        next();
+    });
     // Public endpoint: check links with quota
     app.post('/api/checker/check', async (req, res) => {
         try {
@@ -44,8 +48,7 @@ function setupCheckerAPI(app) {
             }
 
             // IP-based quota check
-            const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-                || req.connection?.remoteAddress || 'unknown';
+            const clientIp = req.ip || 'unknown';
             const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
             const d = db.getDb();
@@ -75,6 +78,8 @@ function setupCheckerAPI(app) {
             // Limit to remaining quota
             const linksToProcess = toCheck.slice(0, remaining);
 
+            d.run(`INSERT INTO checker_quota(ip,date,count) VALUES(?,?,?) ON CONFLICT(ip,date) DO UPDATE SET count=count+excluded.count`, [clientIp,today,linksToProcess.length]);
+            db.saveDatabase();
             // Phase 1: Cache check (instant, free)
             const cached = [];
             const newUrls = [];
@@ -104,15 +109,6 @@ function setupCheckerAPI(app) {
 
             // Increment quota (only count API calls, not cache hits)
             const linksChecked = linksToProcess.length;
-            try {
-                d.run(
-                    `INSERT INTO checker_quota (ip, date, count) VALUES (?, ?, ?)
-                     ON CONFLICT(ip, date) DO UPDATE SET count = count + ?`,
-                    [clientIp, today, linksChecked, linksChecked]
-                );
-                db.saveDatabase();
-            } catch { /* quota tracking failed — allow anyway */ }
-
             const newUsed = usedToday + linksChecked;
             res.json({
                 results,
@@ -145,8 +141,7 @@ function setupCheckerAPI(app) {
             }
 
             const dailyQuota = parseInt(db.getSetting('checker_daily_quota') || '20');
-            const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-                || req.connection?.remoteAddress || 'unknown';
+            const clientIp = req.ip || 'unknown';
             const today = new Date().toISOString().slice(0, 10);
 
             const d = db.getDb();

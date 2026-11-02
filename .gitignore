@@ -8,3 +8,8 @@ node_modules/
 *.db-wal
 .DS_Store
 botshop-platform/
+
+*.db.*
+backups/
+test-results/
+playwright-report/

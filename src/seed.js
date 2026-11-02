@@ -5,6 +5,7 @@
 const db = require('./database');
 
 async function seed() {
+    if (process.env.NODE_ENV !== 'test' || !process.env.DB_PATH || require('fs').existsSync(process.env.DB_PATH)) throw new Error('Seed requires NODE_ENV=test and a new DB_PATH');
     await db.initDatabase();
 
     console.log('🌱 Seeding database...');

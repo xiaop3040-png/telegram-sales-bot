@@ -305,8 +305,8 @@ function showLanguageSelection(bot, chatId, messageId, userId) {
 function sendMainMenu(bot, chatId, editMessageId = null, userId = null) {
     const lang = userId ? getLang(userId, db.getUserLanguage) : 'vi';
 
-    let text = '🏪 **CLOUDX SHOP**\n\n';
-    text += t('welcome', lang, { shopName: 'CloudX Shop' }) + '\n';
+    let text = '🏪 **XIAOP SHOPBOT**\n\n';
+    text += t('welcome', lang, { shopName: 'XiaoP Shop' }) + '\n';
 
     // New user discount hint
     if (!editMessageId && userId && db.isNewUser(userId)) {

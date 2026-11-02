@@ -1,6 +1,11 @@
 const path = require('path');
 const fs = require('fs');
 const initSqlJs = require('sql.js');
+const snapshot = require('./security/snapshot');
+const valid = require('./security/validation');
+let SQLModule;
+let transactionDepth = 0;
+let ownsLock = false;
 
 // DB path priority: ENV > project dir > /tmp fallback
 const PROJECT_DB_PATH = path.join(__dirname, '..', 'bot.db');
@@ -28,11 +33,18 @@ let db = null;
 // ==================== Init ====================
 
 async function initDatabase() {
-    const SQL = await initSqlJs();
+    const SQL = SQLModule = await initSqlJs();
+    if (!ownsLock) {
+        fs.writeFileSync(DB_PATH + '.lock', String(process.pid), { flag: 'wx', mode: 0o600 });
+        ownsLock = true;
+        process.once('exit', () => { try { fs.unlinkSync(DB_PATH + '.lock'); } catch {} });
+    }
+    if (db) db.close();
 
     if (fs.existsSync(DB_PATH)) {
         const buffer = fs.readFileSync(DB_PATH);
-        db = new SQL.Database(buffer);
+        if (!fs.existsSync(DB_PATH + '.pre-v3')) fs.writeFileSync(DB_PATH + '.pre-v3', snapshot.encode(snapshot.decode(buffer)), {mode:0o600,flag:'wx'});
+        db = new SQL.Database(snapshot.decode(buffer));
     } else {
         db = new SQL.Database();
     }
@@ -293,7 +305,7 @@ async function initDatabase() {
         `ALTER TABLE user_preferences ADD COLUMN preferred_payment_method TEXT`,
     ];
     for (const sql of migrations) {
-        try { db.run(sql); } catch (e) { /* column already exists */ }
+        try { db.run(sql); } catch (e) { if (!/duplicate column name/i.test(e.message)) throw e; }
     }
 
     // Checker quota table (public link checker)
@@ -328,15 +340,46 @@ async function initDatabase() {
         } catch (e) { /* ignore */ }
     }
 
+    db.run(fs.readFileSync(path.join(__dirname, '../migrations/003-shopbot.sql'), 'utf8'));
     saveDatabase();
     console.log(`✅ Database initialized (${DB_PATH})`);
     return db;
 }
 
 function saveDatabase() {
-    if (!db) return;
-    const data = db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
+    if (!db || transactionDepth) return;
+    const data = snapshot.encode(Buffer.from(db.export()));
+    // Write a complete snapshot before replacing the database file.
+    // A failed write must not truncate the last known-good database.
+    const tempPath = DB_PATH + '.tmp';
+    try {
+        const fd = fs.openSync(tempPath, 'w', 0o600);
+        try { fs.writeFileSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        fs.renameSync(tempPath, DB_PATH);
+    } catch (err) {
+        try { fs.unlinkSync(tempPath); } catch (_) { /* best effort */ }
+        throw err;
+    }
+}
+
+function atomic(fn) {
+    if (transactionDepth) return fn();
+    const before = db.export();
+    transactionDepth++;
+    try {
+        db.run('BEGIN IMMEDIATE');
+        const result = fn();
+        if (result && typeof result.then === 'function') throw new Error('Async transaction forbidden');
+        db.run('COMMIT');
+        transactionDepth--;
+        saveDatabase();
+        return result;
+    } catch (err) {
+        transactionDepth = 0;
+        db.close();
+        db = new SQLModule.Database(before);
+        throw err;
+    }
 }
 
 function getDb() {
@@ -409,7 +452,7 @@ function getProducts() {
     const stmt = db.prepare(`
     SELECT p.*, c.name as category_name, c.emoji as category_emoji,
            (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 0) as credential_stock,
-           (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')) as order_sold
+           (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')) as order_sold
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     WHERE CAST(p.is_active AS INTEGER) = 1 AND COALESCE(p.is_hidden, 0) = 0
@@ -443,7 +486,7 @@ function getFeaturedProducts() {
     const stmt = db.prepare(`
     SELECT p.*, c.name as category_name, c.emoji as category_emoji,
            (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 0) as credential_stock,
-           (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')) as order_sold
+           (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')) as order_sold
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     WHERE CAST(p.is_active AS INTEGER) = 1 AND CAST(p.is_featured AS INTEGER) = 1 AND COALESCE(p.is_hidden, 0) = 0
@@ -469,7 +512,7 @@ function getProductsByCategory(categoryId) {
     const stmt = db.prepare(`
     SELECT p.*, c.name as category_name, c.emoji as category_emoji,
            (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 0) as credential_stock,
-           (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')) as order_sold
+           (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')) as order_sold
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     WHERE CAST(p.is_active AS INTEGER) = 1 AND COALESCE(p.is_hidden, 0) = 0 AND p.category_id = ?
@@ -496,7 +539,7 @@ function getProductById(id) {
     const stmt = db.prepare(`
     SELECT p.*, c.name as category_name, c.emoji as category_emoji,
            (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 0) as credential_stock,
-           (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')) as order_sold
+           (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')) as order_sold
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     WHERE p.id = ?
@@ -520,6 +563,8 @@ function getProductById(id) {
 }
 
 function addProduct(name, price, description = '', note = '', categoryId = null, credentialFields = null, productType = 'credential', inviteSlots = 0, deliveryHours = 24, subscriptionDays = null, preorderStock = 0, warrantyDays = null, costPrice = 0, sellerInfo = {}) {
+    valid.text(name,'name'); valid.integer(price,'price',1);
+    if (!['credential','invite','preorder'].includes(productType)) throw new Error('Invalid product type');
     const defaultFields = JSON.stringify([
         { key: 'username', label: 'Tài khoản', icon: '👤' },
         { key: 'password', label: 'Mật khẩu', icon: '🔑' },
@@ -543,6 +588,11 @@ function reorderProducts(orderedIds) {
 }
 
 function updateProduct(id, updates) {
+    const allowed = new Set(['name','price','description','note','category_id','credential_fields','product_type','invite_slots','delivery_hours','subscription_days','preorder_stock','warranty_days','cost_price','seller_name','seller_telegram','seller_phone','seller_email','seller_note','is_active','is_hidden','max_per_user','is_featured','customer_fields','sort_order']);
+    if (!Object.keys(updates).length || Object.keys(updates).some(k => !allowed.has(k))) throw new Error('Invalid product fields');
+    if (updates.price !== undefined) valid.integer(updates.price,'price',1);
+    if (updates.name !== undefined) valid.text(updates.name,'name');
+    if (updates.product_type !== undefined && !['credential','invite','preorder'].includes(updates.product_type)) throw new Error('Invalid product type');
     const fields = [];
     const values = [];
     for (const [key, value] of Object.entries(updates)) {
@@ -593,20 +643,23 @@ function getStockCount(productId) {
 }
 
 function addCredential(productId, data) {
+    if (!getProductById(productId) || !data || Array.isArray(data) || typeof data !== 'object' || JSON.stringify(data).length > 2000) throw new Error('Invalid credential');
     db.run('INSERT INTO credentials (product_id, data) VALUES (?, ?)', [productId, JSON.stringify(data)]);
     saveDatabase();
 }
 
 function bulkAddCredentials(productId, credsList) {
     try {
-        db.run('BEGIN TRANSACTION');
+        // Transaction owned by exported mutation wrapper.
+        if (!Array.isArray(credsList) || credsList.length > 500) throw new Error('Invalid bulk credentials');
         for (const data of credsList) {
+            if (!data || typeof data !== 'object' || Array.isArray(data) || JSON.stringify(data).length > 2000) throw new Error('Invalid credential');
             db.run('INSERT INTO credentials (product_id, data) VALUES (?, ?)', [productId, JSON.stringify(data)]);
         }
-        db.run('COMMIT');
+        
         saveDatabase();
     } catch (err) {
-        db.run('ROLLBACK');
+        
         throw err;
     }
     return credsList.length;
@@ -614,7 +667,7 @@ function bulkAddCredentials(productId, credsList) {
 
 function markCredentialsSold(credentialIds, orderId) {
     for (const id of credentialIds) {
-        db.run('UPDATE credentials SET is_sold = 1, order_id = ? WHERE id = ?', [orderId, id]);
+        db.run('UPDATE credentials SET is_sold = 1, order_id = ? WHERE id = ? AND is_sold = 0 AND order_id IS NULL', [orderId, id]);
     }
     saveDatabase();
 }
@@ -623,11 +676,14 @@ function markCredentialsSold(credentialIds, orderId) {
 
 function generateOrderCode() {
     const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const random = require('node:crypto').randomInt(1000000).toString().padStart(6, '0');
     return `ORD${timestamp}${random}`;
 }
 
 function createOrder({ telegramUserId, telegramUsername, productId, productName, quantity, unitPrice, totalAmount, qrUrl, expiresAt, customerEmail, discountCode, discountAmount }) {
+    valid.quantity(quantity); valid.integer(unitPrice,'unit price',1); valid.integer(totalAmount,'total',1);
+    const product = getProductById(productId);
+    if (!product || !product.is_active) throw new Error('Unavailable product');
     const orderCode = generateOrderCode();
     db.run(
         `INSERT INTO orders (order_code, telegram_user_id, telegram_username, product_id, product_name, quantity, unit_price, total_amount, payment_code, qr_url, expires_at, customer_email, discount_code, discount_amount)
@@ -685,8 +741,8 @@ function getUserOrders(telegramUserId, limit = 10) {
 function getUserStats(telegramUserId) {
     const orders = db.exec(
         `SELECT COUNT(*) as total_orders,
-            COALESCE(SUM(CASE WHEN status IN ('paid','delivered') THEN total_amount ELSE 0 END), 0) as total_spent,
-            COALESCE(SUM(CASE WHEN status IN ('paid','delivered') THEN quantity ELSE 0 END), 0) as total_items
+            COALESCE(SUM(CASE WHEN status IN ('paid','delivering','delivered') THEN total_amount ELSE 0 END), 0) as total_spent,
+            COALESCE(SUM(CASE WHEN status IN ('paid','delivering','delivered') THEN quantity ELSE 0 END), 0) as total_items
      FROM orders WHERE telegram_user_id = ?`,
         [telegramUserId]
     );
@@ -702,7 +758,7 @@ function getUserStats(telegramUserId) {
  */
 function isNewUser(telegramUserId) {
     const result = db.exec(
-        `SELECT COUNT(*) FROM orders WHERE telegram_user_id = ? AND status IN ('paid','delivered')`,
+        `SELECT COUNT(*) FROM orders WHERE telegram_user_id = ? AND status IN ('paid','delivering','delivered')`,
         [telegramUserId]
     );
     const count = result.length > 0 ? result[0].values[0][0] : 0;
@@ -710,6 +766,11 @@ function isNewUser(telegramUserId) {
 }
 
 function updateOrderStatus(orderCode, status) {
+    const current = getOrderByCode(orderCode);
+    if (!current) throw new Error('Order not found');
+    if (current.status === status) return false;
+    const allowed = { pending: ['paid','cancelled','expired'], paid: ['delivering','delivered'], delivering: ['delivered'] };
+    if (!(allowed[current.status] || []).includes(status)) throw new Error('Invalid order transition');
     const extraFields = {};
     if (status === 'paid') extraFields.paid_at = new Date().toISOString();
     if (status === 'delivered') extraFields.delivered_at = new Date().toISOString();
@@ -767,15 +828,15 @@ function getAllProductsStock() {
     const stmt = db.prepare(`
     SELECT p.id, p.name, p.price, p.description, p.note, p.credential_fields, p.is_active, p.is_hidden,
            p.product_type, p.invite_slots, p.delivery_hours, p.subscription_days, p.customer_fields,
-           p.preorder_stock, p.cost_price, p.seller_name, p.seller_telegram, p.seller_phone, p.seller_email, p.seller_note,
+           p.category_id, p.warranty_days, p.preorder_stock, p.cost_price, p.seller_name, p.seller_telegram, p.seller_phone, p.seller_email, p.seller_note,
            CASE p.product_type
-             WHEN 'invite' THEN MAX(0, COALESCE(p.invite_slots, 0) - (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')))
-             WHEN 'preorder' THEN MAX(0, COALESCE(p.preorder_stock, 0) - (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')))
+             WHEN 'invite' THEN MAX(0, COALESCE(p.invite_slots, 0) - (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')))
+             WHEN 'preorder' THEN MAX(0, COALESCE(p.preorder_stock, 0) - (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')))
              ELSE (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 0)
            END as available,
            CASE p.product_type
-             WHEN 'invite' THEN (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered'))
-             WHEN 'preorder' THEN (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered'))
+             WHEN 'invite' THEN (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered'))
+             WHEN 'preorder' THEN (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered'))
              ELSE (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 1)
            END as sold,
            CASE p.product_type
@@ -837,7 +898,7 @@ function getUniqueCustomerIds() {
     const stmt = db.prepare(`
       SELECT DISTINCT telegram_user_id, telegram_username 
       FROM orders 
-      WHERE status IN ('paid', 'delivered')
+      WHERE status IN ('paid', 'delivering', 'delivered')
     `);
     const results = [];
     while (stmt.step()) results.push(stmt.getAsObject());
@@ -859,7 +920,7 @@ function getCustomerStats(page = 1, limit = 50) {
         o.telegram_user_id,
         o.telegram_username,
         COUNT(*) as total_orders,
-        SUM(CASE WHEN o.status IN ('paid','delivered') THEN o.total_amount ELSE 0 END) as total_spent,
+        SUM(CASE WHEN o.status IN ('paid','delivering','delivered') THEN o.total_amount ELSE 0 END) as total_spent,
         COUNT(DISTINCT o.product_id) as unique_products,
         MAX(o.created_at) as last_purchase,
         GROUP_CONCAT(DISTINCT p.name) as product_names,
@@ -886,11 +947,11 @@ function getDashboardStats() {
     const todayStr = new Date().toISOString().split('T')[0];
     const stmt = db.prepare(`
       SELECT
-        COALESCE(SUM(CASE WHEN status IN ('paid','delivered') AND COALESCE(include_in_analytics, 1) = 1 THEN total_amount ELSE 0 END), 0) as totalRevenue,
-        COALESCE(SUM(CASE WHEN status IN ('paid','delivered') AND COALESCE(include_in_analytics, 1) = 1 AND DATE(paid_at) = ? THEN total_amount ELSE 0 END), 0) as todayRevenue,
+        COALESCE(SUM(CASE WHEN status IN ('paid','delivering','delivered') AND COALESCE(include_in_analytics, 1) = 1 THEN total_amount ELSE 0 END), 0) as totalRevenue,
+        COALESCE(SUM(CASE WHEN status IN ('paid','delivering','delivered') AND COALESCE(include_in_analytics, 1) = 1 AND DATE(paid_at) = ? THEN total_amount ELSE 0 END), 0) as todayRevenue,
         COUNT(*) as totalOrders,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pendingOrders,
-        SUM(CASE WHEN status IN ('paid','delivered') THEN 1 ELSE 0 END) as paidOrders,
+        SUM(CASE WHEN status IN ('paid','delivering','delivered') THEN 1 ELSE 0 END) as paidOrders,
         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelledOrders,
         SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expiredOrders
       FROM orders
@@ -948,6 +1009,8 @@ function createManualOrder(data) {
     let calculatedTotal = 0;
     const validatedItems = [];
     for (const item of items) {
+        valid.quantity(item.quantity || 1);
+        if (!['catalog','freeform'].includes(item.type)) throw new Error('Invalid manual item');
         if (item.type === 'catalog') {
             const product = getProductById(item.productId);
             if (!product) {
@@ -991,6 +1054,7 @@ function createManualOrder(data) {
     }
 
     const totalAmount = totalOverride != null ? totalOverride : (calculatedTotal - (discountAmount || 0));
+    valid.integer(totalAmount,'total',1);
     const orderCode = `MAN${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
     const now = new Date().toISOString();
 
@@ -1031,21 +1095,27 @@ function createManualOrder(data) {
         ]
     );
 
+    const manualOrderId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    for (const item of validatedItems) {
+        db.run('INSERT INTO order_items(order_id,product_id,product_name,quantity,unit_price,subtotal) VALUES(?,?,?,?,?,?)', [manualOrderId,item.productId || 0,item.productName,item.quantity,item.unitPrice,item.quantity * item.unitPrice]);
+    }
     // Handle credential assignment for delivered catalog items
     if (['paid', 'delivered'].includes(status)) {
         for (const item of validatedItems) {
             if (item.type === 'catalog' && item.productType === 'credential') {
                 const creds = getAvailableCredentials(item.productId, item.quantity);
+                if (creds.length < item.quantity) throw new Error('Insufficient stock');
                 if (creds.length >= item.quantity) {
                     const credIds = creds.slice(0, item.quantity).map(c => c.id);
                     // Get order ID from last insert
-                    const oid = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
+                    const oid = manualOrderId;
                     markCredentialsSold(credIds, oid);
                 }
             }
         }
     }
 
+    if (['paid','delivered'].includes(status)) db.run('INSERT INTO payment_ledger(provider,transaction_id,order_code,amount,accepted_at) VALUES(?,?,?,?,?)',['manual',orderCode,orderCode,totalAmount,now]);
     saveDatabase();
 
     return {
@@ -1060,10 +1130,15 @@ function createManualOrder(data) {
 }
 
 function updateManualOrder(orderCode, updates) {
+    if (updates.status && !['pending','paid','delivered','cancelled'].includes(updates.status)) throw new Error('Invalid status');
     const order = getOrderByCode(orderCode);
     if (!order) throw { code: 'ORDER_NOT_FOUND', message: 'Đơn hàng không tồn tại' };
     if (order.source !== 'manual') throw { code: 'NOT_MANUAL_ORDER', message: 'Chỉ sửa được đơn thủ công' };
 
+    if (updates.status && updates.status !== order.status) {
+        const transitions = { pending:['paid','delivered','cancelled'], paid:['delivered','cancelled'] };
+        if (!(transitions[order.status] || []).includes(updates.status)) throw new Error('Invalid manual transition');
+    }
     const allowed = ['status', 'note', 'payment_method', 'customer_name', 'customer_phone',
         'customer_email', 'customer_contact_id', 'include_in_analytics'];
     const fields = [];
@@ -1077,19 +1152,19 @@ function updateManualOrder(orderCode, updates) {
     }
 
     // Handle status transitions
-    if (updates.status === 'paid' && order.status === 'pending') {
-        fields.push('paid_at = ?');
-        values.push(new Date().toISOString());
-        // Assign credentials if product is credential type
-        if (order.product_id) {
-            const product = getProductById(order.product_id);
-            if (product && product.product_type === 'credential') {
-                const creds = getAvailableCredentials(order.product_id, order.quantity);
-                if (creds.length >= order.quantity) {
-                    markCredentialsSold(creds.slice(0, order.quantity).map(c => c.id), order.id);
-                }
+    if (['paid','delivered'].includes(updates.status) && order.status === 'pending') {
+        fields.push('paid_at = ?'); values.push(new Date().toISOString());
+        const items = getOrderItems(order.id);
+        const lines = items.length ? items : [{product_id:order.product_id,quantity:order.quantity}];
+        for (const item of lines) {
+            const product = getProductById(item.product_id);
+            if (product?.product_type === 'credential') {
+                const creds = getAvailableCredentials(item.product_id,item.quantity);
+                if (creds.length !== item.quantity) throw new Error('Insufficient stock');
+                markCredentialsSold(creds.map(c => c.id),order.id);
             }
         }
+        db.run('INSERT OR IGNORE INTO payment_ledger(provider,transaction_id,order_code,amount,accepted_at) VALUES(?,?,?,?,?)',['manual',orderCode,orderCode,order.total_amount,new Date().toISOString()]);
     }
     if (updates.status === 'delivered') {
         fields.push('delivered_at = ?');
@@ -1098,7 +1173,7 @@ function updateManualOrder(orderCode, updates) {
     if (updates.status === 'cancelled' && ['pending', 'paid'].includes(order.status)) {
         // Rollback credentials if they were assigned
         if (order.product_id && order.status === 'paid') {
-            db.run('UPDATE credentials SET is_sold = 0, order_id = NULL WHERE order_id = ?', [order.id]);
+            // Allocated credentials remain quarantined; never recycle automatically.
         }
     }
 
@@ -1117,7 +1192,7 @@ function deleteManualOrder(orderCode) {
 
     // Rollback credentials
     if (order.product_id && ['paid', 'delivered'].includes(order.status)) {
-        db.run('UPDATE credentials SET is_sold = 0, order_id = NULL WHERE order_id = ?', [order.id]);
+        // Allocated credentials remain quarantined; never recycle automatically.
     }
 
     // Soft delete
@@ -1358,7 +1433,7 @@ function getVisibleProducts(userCurrency = 'VND') {
     const stmt = db.prepare(`
         SELECT p.*, 
                (SELECT COUNT(*) FROM credentials WHERE product_id = p.id AND CAST(is_sold AS INTEGER) = 0) as credential_stock,
-               (SELECT COALESCE(SUM(quantity), 0) FROM orders WHERE product_id = p.id AND status IN ('paid','delivered')) as order_sold
+               (SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT oi.product_id,oi.quantity,o.status FROM order_items oi JOIN orders o ON o.id=oi.order_id UNION ALL SELECT o.product_id,o.quantity,o.status FROM orders o WHERE NOT EXISTS(SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)) x WHERE x.product_id=p.id AND x.status IN ('paid','delivering','delivered')) as order_sold
         FROM products p
         WHERE CAST(p.is_active AS INTEGER) = 1
           AND COALESCE(p.is_hidden, 0) = 0
@@ -1387,6 +1462,7 @@ function getVisibleProducts(userCurrency = 'VND') {
 
 module.exports = {
     initDatabase,
+    atomic,
     saveDatabase,
     getDb,
     // Categories
@@ -1598,7 +1674,13 @@ function getBankConfig() {
 
 // ==================== Discount Codes ====================
 
+function validateDiscount(data) {
+    valid.text(data.code,'discount code',40);
+    if (!/^[A-Za-z0-9-]+$/.test(data.code) || !['percent','fixed'].includes(data.type || 'percent')) throw new Error('Invalid discount');
+    valid.integer(Number(data.value),'discount value',1,data.type === 'fixed' ? Number.MAX_SAFE_INTEGER : 100);
+}
 function createDiscountCode(data) {
+    validateDiscount(data);
     // Support multi-product: product_ids is JSON array, product_id is legacy single
     let productId = data.product_id || null;
     let productIds = null;
@@ -1835,6 +1917,7 @@ function validateDiscountCode(code, userId, orderAmount, productId, quantity, un
  * Record usage of a discount code
  */
 function useDiscountCode(discountId, userId, orderCode) {
+    if (db.exec('SELECT 1 FROM discount_usage WHERE discount_code_id=? AND order_code=?',[discountId,orderCode]).length) return;
     // Increment used_count
     db.run('UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?', [discountId]);
     // Log usage
@@ -1853,7 +1936,7 @@ function recalcDiscountUsage(discountId) {
     db.run(`
         DELETE FROM discount_usage 
         WHERE discount_code_id = ? 
-        AND order_code NOT IN (SELECT order_code FROM orders WHERE status IN ('paid', 'delivered'))
+        AND order_code NOT IN (SELECT order_code FROM orders WHERE status IN ('paid', 'delivering', 'delivered'))
     `, [discountId]);
     // Recalc used_count from actual usage records
     const result = db.exec('SELECT COUNT(*) FROM discount_usage WHERE discount_code_id = ?', [discountId]);
@@ -1864,6 +1947,9 @@ function recalcDiscountUsage(discountId) {
 }
 
 function updateDiscountCode(id, updates) {
+    const columns = db.exec('PRAGMA table_info(discount_codes)')[0].values.map(r => r[1]).filter(k => !['id','used_count','created_at'].includes(k));
+    if (!Object.keys(updates).length || Object.keys(updates).some(k => !columns.includes(k))) throw new Error('Invalid discount fields');
+    validateDiscount({ ...getDiscountCodeById(id), ...updates });
     const fields = [];
     const values = [];
     for (const [key, value] of Object.entries(updates)) {
@@ -1902,7 +1988,7 @@ function getDiscountUsageStats(discountId) {
  */
 function getUserProductPurchaseCount(userId, productId) {
     const result = db.exec(
-        `SELECT COALESCE(SUM(quantity), 0) as total FROM orders WHERE telegram_user_id = ? AND product_id = ? AND status IN ('paid', 'delivered')`,
+        `SELECT COALESCE(SUM(quantity), 0) as total FROM orders WHERE telegram_user_id = ? AND product_id = ? AND status IN ('paid', 'delivering', 'delivered')`,
         [userId, productId]
     );
     return result.length > 0 ? result[0].values[0][0] : 0;
@@ -1959,6 +2045,11 @@ function setPreferredPaymentMethod(userId, method) {
 // ==================== Cart ====================
 
 function addToCart(userId, productId, quantity = 1) {
+    valid.quantity(quantity);
+    const product = getProductById(productId);
+    if (!product || !product.is_active) throw new Error('Unavailable product');
+    const current = getCart(userId).find(i => i.product_id === productId);
+    valid.quantity(quantity + (current?.quantity || 0));
     db.run(
         `INSERT INTO cart_items (user_id, product_id, quantity)
          VALUES (?, ?, ?)
@@ -1994,6 +2085,7 @@ function getCartCount(userId) {
 }
 
 function updateCartQty(userId, productId, quantity) {
+    valid.integer(quantity,'quantity',0,999);
     if (quantity <= 0) {
         return removeFromCart(userId, productId);
     }
@@ -2048,8 +2140,20 @@ function createOrderWithItems(params, items) {
     } = params;
 
     const orderCode = generateOrderCode();
-    const primaryItem = items[0] || {};
+    if (!Array.isArray(items) || !items.length || items.length > 50) throw new Error('Invalid cart');
+    if (new Set(items.map(i => i.productId)).size !== items.length) throw new Error('Duplicate cart product');
+    for (const item of items) {
+        valid.quantity(item.quantity);
+        const p = getProductById(item.productId);
+        if (!p || !p.is_active || p.price !== item.unitPrice || item.subtotal !== p.price * item.quantity || p.stock < item.quantity) throw new Error('Cart changed; refresh checkout');
+    }
+    valid.integer(totalAmount,'total',1);
+    valid.integer(discountAmount || 0,'discount');
+    if (totalAmount !== items.reduce((sum,i) => sum + i.subtotal,0) - (discountAmount || 0)) throw new Error('Invalid total');
+    const primaryItem = items[0];
 
+    // Transaction owned by exported mutation wrapper.
+    try {
     db.run(
         `INSERT INTO orders (
       order_code, telegram_user_id, telegram_username,
@@ -2085,6 +2189,11 @@ function createOrderWithItems(params, items) {
         );
     }
 
+    
+    } catch (err) {
+        
+        throw err;
+    }
     saveDatabase();
     return orderCode;
 }
@@ -2150,4 +2259,32 @@ function getEnabledPaymentMethods() {
     }
 
     return methods;
+}
+
+function validateCheckoutDiscount(params, items) {
+    if (!params.discountCode) {
+        if (params.discountAmount) throw new Error('Discount code required');
+        return;
+    }
+    const total = items.reduce((sum,i)=>sum+i.unitPrice*i.quantity,0);
+    const single = items.length === 1;
+    const result = validateDiscountCode(params.discountCode,params.telegramUserId,total,items[0].productId,single?items[0].quantity:1,single?items[0].unitPrice:total);
+    if (!result.valid || result.discountAmount !== params.discountAmount || (!single && getDiscountApplicableProducts(result.discount).length)) throw new Error('Discount changed; refresh checkout');
+    const discount = result.discount;
+    const held = db.exec("SELECT COUNT(*),COALESCE(SUM(telegram_user_id=?),0) FROM orders WHERE discount_code=? AND status='pending' AND expires_at>?",[params.telegramUserId,discount.code,new Date().toISOString()])[0].values[0];
+    const usedByUser=db.exec('SELECT COUNT(*) FROM discount_usage WHERE discount_code_id=? AND telegram_user_id=?',[discount.id,params.telegramUserId])[0].values[0][0];
+    if ((discount.max_uses>0 && discount.used_count+held[0]>=discount.max_uses) || (discount.max_uses_per_user>0 && usedByUser+held[1]>=discount.max_uses_per_user) || (discount.is_new_user_only && held[1]>0)) throw new Error('Discount limit reached');
+}
+
+// Every public mutation either persists fully or restores the pre-call in-memory snapshot.
+for (const [name, fn] of Object.entries(module.exports)) {
+    if (/^(add|update|delete|reorder|create|bulk|mark|set|use|recalc|remove|clearCart|cleanExpired|upsert)/.test(name)) {
+        module.exports[name] = (...args) => atomic(() => {
+            if (name === 'createOrder') validateCheckoutDiscount(args[0],[args[0]]);
+            if (name === 'createOrderWithItems') validateCheckoutDiscount(args[0],args[1]);
+            const result = fn(...args);
+            if (['createOrder','createOrderWithItems'].includes(name)) db.run('INSERT INTO order_payment_accounts(order_code,account_no) VALUES(?,?)',[result,String(getBankConfig().accountNo || '')]);
+            return result;
+        });
+    }
 }

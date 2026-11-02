@@ -1,137 +1,17 @@
-const db = require('../database');
 const config = require('../config');
-const { deliverCredentials } = require('./deliveryHandler');
-
-/**
- * Setup Express route for SePay webhook
- * SePay sends POST with transaction data when money comes in
- */
+const { equalSecret } = require('../security/secrets');
+const { processPayment } = require('../services/payments');
 function setupWebhookHandler(app, bot) {
     app.post(config.webhookPath, async (req, res) => {
+        // SePay API Key authentication: Authorization: Apikey <configured webhook key>.
+        if (!config.sepayWebhookKey) return res.status(503).json({ success: false });
+        if (!equalSecret(req.headers.authorization, `Apikey ${config.sepayWebhookKey}`)) return res.status(401).json({ success: false });
         try {
-            const payload = req.body;
-
-            // Note: SePay doesn't support custom auth headers in webhooks.
-            // Security is handled via secret webhook path (WEBHOOK_PATH env var).
-
-            console.log(`📥 Webhook: ${payload.transferType} ${payload.transferAmount} — code: ${payload.code || 'N/A'}`);
-
-            // Only process incoming transfers
-            if (payload.transferType !== 'in') {
-                res.json({ success: true });
-                return;
-            }
-
-            const amount = payload.transferAmount;
-            const content = (payload.content || '').toUpperCase();
-            const code = (payload.code || '').toUpperCase();
-
-            // Try to find order code in SePay's extracted code first
-            let orderCode = null;
-
-            if (code && code.startsWith('ORD')) {
-                orderCode = code;
-            }
-
-            // Fallback: search in full content
-            if (!orderCode) {
-                const match = content.match(/ORD\d{13,20}/);
-                if (match) orderCode = match[0];
-            }
-
-            if (!orderCode) {
-                console.log('⚠️ No order code found in transaction');
-                res.json({ success: true });
-                return;
-            }
-
-            console.log(`🔍 Order: ${orderCode}, amount: ${amount}`);
-
-            // Find pending order
-            const order = db.getPendingOrderByCode(orderCode);
-
-            if (!order) {
-                console.log(`⚠️ No pending order: ${orderCode}`);
-                res.json({ success: true });
-                return;
-            }
-
-            // Verify amount
-            if (amount < order.total_amount) {
-                console.log(`⚠️ Amount mismatch: ${orderCode} — ${amount} < ${order.total_amount}`);
-
-                bot.sendMessage(order.telegram_user_id,
-                    `⚠️ Đơn hàng #${orderCode}: Số tiền nhận được (${amount.toLocaleString('vi-VN')} đ) ` +
-                    `chưa đủ (cần ${order.total_amount.toLocaleString('vi-VN')} đ).\n` +
-                    `Vui lòng chuyển thêm hoặc liên hệ admin.`
-                );
-
-                res.json({ success: true });
-                return;
-            }
-
-            // ✅ Payment confirmed!
-            console.log(`✅ Payment confirmed: ${orderCode}`);
-            db.updateOrderStatus(orderCode, 'paid');
-
-            // Record discount usage on successful payment
-            if (order.discount_code) {
-                const discountObj = db.getDiscountCodeByCode(order.discount_code);
-                if (discountObj) {
-                    db.useDiscountCode(discountObj.id, order.telegram_user_id, orderCode);
-                }
-            }
-
-            // Notify user
-            await bot.sendMessage(order.telegram_user_id,
-                `✅ Đã xác nhận thanh toán cho đơn hàng #${orderCode}!\n\n` +
-                `Đang gửi thông tin sản phẩm...`
-            );
-
-            // Deliver credentials with robust error handling
-            try {
-                const delivered = await deliverCredentials(bot, order);
-                if (!delivered) {
-                    console.error(`⚠️ deliverCredentials returned false for ${orderCode}`);
-                    // Notify admin about delivery failure
-                    bot.sendMessage(config.adminTelegramId,
-                        `⚠️ **GIAO HÀNG THẤT BẠI**\n\n` +
-                        `Đơn: #${orderCode}\n` +
-                        `SP: ${order.product_name} x${order.quantity}\n` +
-                        `Khách: @${order.telegram_username || order.telegram_user_id}\n\n` +
-                        `Vui lòng kiểm tra stock và giao thủ công.`,
-                        { parse_mode: 'Markdown' }
-                    ).catch(() => {});
-                }
-            } catch (deliveryErr) {
-                console.error(`❌ deliverCredentials threw for ${orderCode}:`, deliveryErr.message);
-                bot.sendMessage(config.adminTelegramId,
-                    `❌ **LỖI GIAO HÀNG**\n\n` +
-                    `Đơn: #${orderCode}\n` +
-                    `Lỗi: ${deliveryErr.message}\n\n` +
-                    `Vui lòng giao thủ công.`,
-                    { parse_mode: 'Markdown' }
-                ).catch(() => {});
-            }
-
-            // Notify admin about payment
-            bot.sendMessage(config.adminTelegramId,
-                `💰 Đơn hàng #${orderCode} đã thanh toán!\n` +
-                `SP: ${order.product_name} x${order.quantity}\n` +
-                `Số tiền: ${amount.toLocaleString('vi-VN')} đ\n` +
-                `Khách: @${order.telegram_username || order.telegram_user_id}`
-            ).catch((err) => {
-                console.warn('[Webhook] Failed to notify admin:', err.message);
-            });
-
+            await processPayment(bot, req.body, 'webhook');
             res.json({ success: true });
-        } catch (err) {
-            console.error('❌ Webhook error:', err.message);
-            res.status(500).json({ error: 'Internal error' });
+        } catch {
+            res.status(500).json({ success: false });
         }
     });
-
-    console.log(`📡 SePay webhook listening at POST ${config.webhookPath}`);
 }
-
 module.exports = { setupWebhookHandler };

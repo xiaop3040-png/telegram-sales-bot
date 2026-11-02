@@ -505,7 +505,7 @@ function setupAdminHandler(bot) {
             return;
         }
 
-        db.updateOrderStatus(orderCode, 'paid');
+        require('../services/payments').confirmManual(orderCode, String(msg.from.id));
         bot.sendMessage(msg.chat.id, `✅ Đã xác nhận đơn: #${orderCode}\nĐang gửi sản phẩm cho khách...`);
 
         await deliverCredentials(bot, order);

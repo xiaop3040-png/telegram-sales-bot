@@ -1,4 +1,4 @@
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBot = require('./telegram');
 const express = require('express');
 const path = require('path');
 const config = require('./config');
@@ -26,7 +26,7 @@ const { setupScheduler } = require('./scheduler');
 const { setupCheckerAPI } = require('./handlers/checkerAPI');
 
 async function main() {
-    console.log('🚀 Starting Telegram Sales Bot v2.0...');
+    console.log('🚀 Starting XiaoP ShopBot v3...');
 
     // 1. Validate config
     validateConfig();
@@ -48,6 +48,14 @@ async function main() {
         console.log('🤖 Bot created in POLLING mode (local)');
     }
 
+    const processUpdate = bot.processUpdate.bind(bot);
+    bot.processUpdate = update => {
+        const message = update?.message || update?.callback_query?.message;
+        if (!message || message.chat?.type !== 'private') return;
+        if (update.callback_query && typeof update.callback_query.data !== 'string') return;
+        processUpdate(update);
+    };
+
     // 5. Set bot commands (BotFather menu)
     await bot.setMyCommands([
         { command: 'start', description: 'Hiện menu chính / Main menu' },
@@ -65,11 +73,19 @@ async function main() {
 
     // 6. Setup Express server
     const app = express();
-    app.use(express.json());
+    app.disable('x-powered-by');
+    app.use((req, res, next) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('X-Frame-Options', 'DENY');
+        res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+        next();
+    });
+    app.use(express.json({ limit: '128kb' }));
 
     // Health check
     app.get('/', (req, res) => {
-        res.json({ status: 'ok', bot: 'Telegram Sales Bot', version: '2.0.0' });
+        res.json({ status: 'ok', bot: 'XiaoP ShopBot', version: '3.0.0' });
     });
 
     // Serve static files (admin panel)
@@ -77,8 +93,9 @@ async function main() {
 
     // Telegram webhook endpoint (production only)
     if (isProduction) {
-        const telegramWebhookPath = `/telegram-webhook/${config.botToken}`;
+        const telegramWebhookPath = '/telegram-webhook';
         app.post(telegramWebhookPath, (req, res) => {
+            if (!require('./security/secrets').equalSecret(req.headers['x-telegram-bot-api-secret-token'], config.telegramWebhookSecret)) return res.sendStatus(401);
             bot.processUpdate(req.body);
             res.sendStatus(200);
         });
@@ -95,13 +112,13 @@ async function main() {
 
     // Helper: set webhook via native fetch
     async function setTelegramWebhook() {
-        const telegramWebhookUrl = `${publicUrl}/telegram-webhook/${config.botToken}`;
+        const telegramWebhookUrl = `${publicUrl}/telegram-webhook`;
         const apiUrl = `https://api.telegram.org/bot${config.botToken}/setWebhook`;
         try {
             const resp = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: telegramWebhookUrl }),
+                body: JSON.stringify({ url: telegramWebhookUrl, secret_token: config.telegramWebhookSecret }),
             });
             const data = await resp.json();
             console.log(`📡 setWebhook result:`, JSON.stringify(data));
@@ -159,6 +176,7 @@ async function main() {
 
     // 9. Start SePay polling backup (reconciles missed webhooks)
     startSepayPoller(bot);
+    const stopRecovery = require('./services/recovery').startRecovery(bot);
 
     // 9. Bot info
     const botInfo = await bot.getMe();
@@ -171,6 +189,9 @@ async function main() {
     // Graceful shutdown
     const shutdown = (signal) => {
         console.log(`\n🛑 ${signal} received, shutting down...`);
+        stopRecovery();
+        require('./utils/sepayPoller').stopSepayPoller();
+        require('./utils/orderExpiry').stopOrderExpiryCheck();
         if (!isProduction) bot.stopPolling();
         db.saveDatabase();
         process.exit(0);
