@@ -15,6 +15,9 @@ Start with [Deployment and recovery](docs/v3/DEPLOYMENT.md), [Architecture](docs
 
 # Telegram Auto-Sales Bot
 
+> [!NOTE]
+> **Source and attribution:** This repository's deployment instructions reference [maingocanh1702/telegram-sales-bot](https://github.com/maingocanh1702/telegram-sales-bot). Review that project's license and commit history before redistributing or claiming authorship. Changes made in this repository should be documented separately; the current README does not establish original authorship.
+
 **v2.3.0** · [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?repo=https://github.com/maingocanh1702/telegram-sales-bot)
 
 > 🚀 **Tìm kiếm phiên bản SaaS Multi-Tenant & Quản lý CTV?**
