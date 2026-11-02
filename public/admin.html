@@ -1,11 +1,105 @@
 <!doctype html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>XiaoP ShopBot · Admin</title><link rel="stylesheet" href="/admin.css"><script src="/admin.js" defer></script></head>
-<body><a class="skip" href="#main">Skip to content</a>
-<section id="login" class="login"><form id="login-form" class="login-card"><div class="brand-mark">XP</div><p class="eyebrow">XIAOP SHOP / XP DIGITAL HUB</p><h1>XiaoP ShopBot</h1><p>Quản trị cửa hàng · Shop administration</p><label for="key">Admin API key</label><input id="key" type="password" required autocomplete="off" minlength="32"><button class="primary" type="submit">Đăng nhập / Sign in →</button><p id="login-error" role="alert"></p></form></section>
-<div id="app" hidden><aside><div class="brand"><span class="brand-mark">XP</span><div>XiaoP <strong>ShopBot</strong><small>XP DIGITAL HUB</small></div></div><nav id="nav" aria-label="Main navigation"></nav><footer><span class="dot"></span> ShopBot v3<button id="logout">Đăng xuất / Sign out</button></footer></aside>
-<main id="main" tabindex="-1"><header><div><p class="eyebrow">XIAOP SHOP / OPERATIONS</p><h1 id="title">Tổng quan</h1><p id="subtitle"></p></div><div class="header-actions"><label class="sr-only" for="lang">Language</label><select id="lang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select><button id="refresh">↻ Refresh</button></div></header>
-<p id="notice" role="status" aria-live="polite"></p><section id="metrics" class="metrics" aria-label="Shop metrics"></section>
-<section class="panel"><div class="panel-heading"><h2 id="table-title"></h2><button id="add" class="primary" hidden>+ Thêm</button></div><div class="filters"><label class="sr-only" for="search">Search</label><input id="search" type="search" placeholder="Tìm kiếm / Search…"><label class="sr-only" for="filter">Filter</label><select id="filter"><option value="">Tất cả / All</option></select><label class="sr-only" for="product">Product</label><select id="product" hidden></select></div><div id="table" class="table-wrap" tabindex="0"></div><div class="pagination"><span id="count"></span><div><button id="prev">←</button><span id="page"></span><button id="next">→</button></div></div></section>
-<p class="footnote">XiaoP ShopBot · XiaoP Shop / XP Digital Hub</p></main></div>
-<dialog id="dialog"><form id="edit-form"><div class="panel-heading"><h2 id="dialog-title"></h2><button id="close" type="button" aria-label="Close">×</button></div><div id="fields"></div><p id="form-error" role="alert"></p><button class="primary" type="submit" id="save">Lưu / Save</button></form></dialog>
-</body></html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>XiaoP ShopBot · Admin</title>
+    <link rel="stylesheet" href="/admin.css" />
+    <script src="/admin.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <section id="login" class="login">
+      <form id="login-form" class="login-card">
+        <div class="brand-mark">XP</div>
+        <p class="eyebrow">XIAOP SHOP / XP DIGITAL HUB</p>
+        <h1>XiaoP ShopBot</h1>
+        <p>Quản trị cửa hàng · Shop administration</p>
+        <label for="key">Admin API key</label
+        ><input
+          id="key"
+          type="password"
+          required
+          autocomplete="off"
+          minlength="32"
+        /><button class="primary" type="submit">Đăng nhập / Sign in →</button>
+        <p id="login-error" role="alert"></p>
+      </form>
+    </section>
+    <div id="app" hidden>
+      <aside>
+        <div class="brand">
+          <span class="brand-mark">XP</span>
+          <div>XiaoP <strong>ShopBot</strong><small>XP DIGITAL HUB</small></div>
+        </div>
+        <nav id="nav" aria-label="Main navigation"></nav>
+        <footer>
+          <span class="dot"></span> ShopBot v3<button id="logout">
+            Đăng xuất / Sign out
+          </button>
+        </footer>
+      </aside>
+      <main id="main" tabindex="-1">
+        <header>
+          <div>
+            <p class="eyebrow">XIAOP SHOP / OPERATIONS</p>
+            <h1 id="title">Tổng quan</h1>
+            <p id="subtitle"></p>
+          </div>
+          <div class="header-actions">
+            <label class="sr-only" for="lang">Language</label
+            ><select id="lang">
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option></select
+            ><button id="refresh">↻ Refresh</button>
+          </div>
+        </header>
+        <p id="notice" role="status" aria-live="polite"></p>
+        <section
+          id="metrics"
+          class="metrics"
+          aria-label="Shop metrics"
+        ></section>
+        <section class="panel">
+          <div class="panel-heading">
+            <h2 id="table-title"></h2>
+            <button id="add" class="primary" hidden>+ Thêm</button>
+          </div>
+          <div class="filters">
+            <label class="sr-only" for="search">Search</label
+            ><input
+              id="search"
+              type="search"
+              placeholder="Tìm kiếm / Search…"
+            /><label class="sr-only" for="filter">Filter</label
+            ><select id="filter">
+              <option value="">Tất cả / All</option></select
+            ><label class="sr-only" for="product">Product</label
+            ><select id="product" hidden></select>
+          </div>
+          <div id="table" class="table-wrap" tabindex="0"></div>
+          <div class="pagination">
+            <span id="count"></span>
+            <div>
+              <button id="prev">←</button><span id="page"></span
+              ><button id="next">→</button>
+            </div>
+          </div>
+        </section>
+        <p class="footnote">XiaoP ShopBot · XiaoP Shop / XP Digital Hub</p>
+      </main>
+    </div>
+    <dialog id="dialog">
+      <form id="edit-form">
+        <div class="panel-heading">
+          <h2 id="dialog-title"></h2>
+          <button id="close" type="button" aria-label="Close">×</button>
+        </div>
+        <div id="fields"></div>
+        <p id="form-error" role="alert"></p>
+        <button class="primary" type="submit" id="save">Lưu / Save</button>
+      </form>
+    </dialog>
+  </body>
+</html>

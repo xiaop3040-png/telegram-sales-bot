@@ -7,6 +7,17 @@ const { t, getLang } = require('../locales');
  * Handle /help and /huongdan commands
  */
 function setupHelpHandler(bot) {
+    bot.onText(/^\/support\s+(ORD\d{13,20})\s+([\s\S]{1,1000})$/, (msg,match) => {
+        if (msg.chat.id !== msg.from.id) return;
+        const order = db.getOrderByCode(match[1]);
+        if (!order || order.telegram_user_id !== msg.from.id) return;
+        db.atomic(() => {
+            const count = db.getDb().exec("SELECT COUNT(*) FROM support_tickets WHERE user_id=? AND status='open'",[msg.from.id])[0].values[0][0];
+            if (count >= 5) return;
+            db.getDb().run('INSERT INTO support_tickets(order_code,user_id,message) VALUES(?,?,?)',[order.order_code,msg.from.id,match[2]]);
+        });
+        bot.sendMessage(msg.chat.id,'Đã ghi nhận yêu cầu / Support request recorded.').catch(()=>{});
+    });
     // /help — support info
     bot.onText(/\/help/, (msg) => {
         showHelp(bot, msg.chat.id, null, msg.from.id);
@@ -34,6 +45,7 @@ function showHelp(bot, chatId, messageId = null, userId = null) {
     text += t('help_issue_2', lang) + '\n';
     text += t('help_issue_3', lang) + '\n';
     text += t('help_issue_4', lang);
+    text += '\n\n/support ORD… nội dung / message — bảo hành, gia hạn / warranty, renewal';
 
     const options = {
         parse_mode: 'Markdown',

@@ -1,3 +1,18 @@
+# XiaoP ShopBot v3
+
+Security-focused digital commerce for **XiaoP Shop / XP Digital Hub**. Draft release: review and stage before production.
+
+- Authenticated SePay webhooks, durable payment ledger and credential allocation before delivery.
+- Encrypted database snapshots, single-writer protection, recovery jobs and audit logs.
+- Vietnamese/English Telegram storefront, cart, coupons, support tickets and renewal management.
+- Responsive black/red admin dashboard with safe rendering, search, filters and pagination.
+
+Start with [Deployment and recovery](docs/v3/DEPLOYMENT.md), [Architecture](docs/v3/ARCHITECTURE.md), [Audit](docs/v3/AUDIT.md) and [Verification](docs/v3/VERIFICATION.md).
+
+**Attribution:** The original deployment instructions reference [maingocanh1702/telegram-sales-bot](https://github.com/maingocanh1702/telegram-sales-bot). Verify upstream licensing before redistribution. This repository does not establish original authorship or grant a new license. Historical documentation follows below and may describe unimplemented roadmap features; docs/v3 is authoritative for this release.
+
+---
+
 # Telegram Auto-Sales Bot
 
 **v2.3.0** · [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?repo=https://github.com/maingocanh1702/telegram-sales-bot)

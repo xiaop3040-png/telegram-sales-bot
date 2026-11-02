@@ -1,4 +1,4 @@
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBot = require('./telegram');
 const express = require('express');
 const path = require('path');
 const config = require('./config');
@@ -176,6 +176,7 @@ async function main() {
 
     // 9. Start SePay polling backup (reconciles missed webhooks)
     startSepayPoller(bot);
+    const stopRecovery = require('./services/recovery').startRecovery(bot);
 
     // 9. Bot info
     const botInfo = await bot.getMe();
@@ -188,6 +189,9 @@ async function main() {
     // Graceful shutdown
     const shutdown = (signal) => {
         console.log(`\n🛑 ${signal} received, shutting down...`);
+        stopRecovery();
+        require('./utils/sepayPoller').stopSepayPoller();
+        require('./utils/orderExpiry').stopOrderExpiryCheck();
         if (!isProduction) bot.stopPolling();
         db.saveDatabase();
         process.exit(0);

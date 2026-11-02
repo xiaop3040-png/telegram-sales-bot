@@ -1,42 +1,524 @@
-'use strict';
-const $ = id => document.getElementById(id);
-const el = (tag,text,className) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=String(text); if(className)n.className=className; return n; };
-let key='',lang='vi',section='dashboard',rows=[],page=1,products=[],editing=null,version=0;
-const labels={dashboard:['Tổng quan','Overview'],orders:['Đơn hàng','Orders'],products:['Sản phẩm','Products'],categories:['Danh mục','Categories'],credentials:['Kho tài khoản','Inventory'],discounts:['Mã giảm giá','Discounts'],customers:['Khách hàng','Customers'],audit:['Nhật ký','Audit log'],settings:['Cài đặt','Settings']};
-const tr=(vi,en)=>lang==='vi'?vi:en;
-const money=n=>new Intl.NumberFormat(lang==='vi'?'vi-VN':'en-US',{style:'currency',currency:'VND',maximumFractionDigits:0}).format(Number(n)||0);
-function notice(text){$('notice').textContent=text;}
-async function api(path,method='GET',body){const r=await fetch('/api/admin'+path,{method,headers:{'Content-Type':'application/json','x-api-key':key},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();if(r.status===401){logout();throw new Error(tr('Phiên đăng nhập không hợp lệ','Invalid session'));}if(!r.ok)throw new Error(data.message||'Request failed');return data;}
-function logout(){key='';rows=[];$('key').value='';$('app').hidden=true;$('login').hidden=false;$('table').replaceChildren();localStorage.removeItem('bot_admin_key');}
-$('login-form').addEventListener('submit',async e=>{e.preventDefault();key=$('key').value;$('login-error').textContent='';try{await api('/dashboard');$('key').value='';$('login').hidden=true;$('app').hidden=false;drawNav();await load();}catch(e){$('login-error').textContent=e.message;key='';}});
-$('logout').onclick=logout;
-$('lang').onchange=()=>{lang=$('lang').value;document.documentElement.lang=lang;drawNav();load();};
-function drawNav(){const nav=$('nav');nav.replaceChildren();for(const [id,text]of Object.entries(labels)){const b=el('button',text[lang==='vi'?0:1]);b.setAttribute('aria-current',id===section?'page':'false');b.onclick=()=>{section=id;page=1;$('search').value='';drawNav();load();};nav.append(b);}if(innerWidth<1000){const b=el('button',tr('Đăng xuất','Sign out'));b.onclick=logout;nav.append(b);}}
-const schemas={
- products:[['name','Tên / Name'],['price','Giá VND / Price','number'],['description','Mô tả / Description'],['productType','Loại / Type','select',['credential','invite','preorder']],['categoryId','Category ID','number'],['inviteSlots','Invite slots','number'],['preorderStock','Preorder stock','number'],['subscriptionDays','Subscription days','number'],['warrantyDays','Warranty days','number'],['credentialFields','Credential fields JSON','json'],['customerFields','Customer fields JSON','json']],
- categories:[['name','Tên / Name'],['emoji','Emoji']],
- credentials:[['data','Dữ liệu tài khoản JSON / Credential JSON','json']],
- discounts:[['code','Mã / Code'],['type','Loại / Type','select',['percent','fixed']],['value','Giá trị / Value','number'],['max_uses','Lượt tối đa / Maximum uses','number'],['max_uses_per_user','Maximum uses per customer','number'],['expires_at','Expires at (ISO date)']],
- settings:[['checker_enabled','Link checker enabled (0/1)'],['checker_daily_quota','Daily quota'],['checker_max_batch','Batch size']]
+"use strict";
+const $ = (id) => document.getElementById(id);
+const el = (tag, text, className) => {
+  const n = document.createElement(tag);
+  if (text !== undefined) n.textContent = String(text);
+  if (className) n.className = className;
+  return n;
 };
-const columns={dashboard:['order_code','product_name','total_amount','status','created_at'],orders:['order_code','product_name','telegram_user_id','total_amount','status','created_at'],products:['id','name','price','product_type','available','sold'],categories:['id','name','emoji','product_count'],credentials:['id','is_sold','order_id'],discounts:['code','type','value','used_count','max_uses'],customers:['telegram_user_id','telegram_username','total_orders','total_spent'],audit:['created_at','actor','action','target','outcome'],settings:['key','value']};
-async function load(){const request=++version;notice(tr('Đang tải…','Loading…'));$('add').hidden=!schemas[section];$('add').textContent=section==='settings'?tr('Sửa cài đặt','Edit settings'):tr('+ Thêm','+ Add');$('metrics').replaceChildren();$('product').hidden=section!=='credentials';$('title').textContent=labels[section][lang==='vi'?0:1];$('table-title').textContent=section==='dashboard'?tr('Đơn hàng gần đây','Recent orders'):$('title').textContent;$('subtitle').textContent=tr('Quản lý hoạt động cửa hàng của bạn.','Manage your shop operations.');try{
- let data;
- if(section==='dashboard'){data=await api('/dashboard');if(request!==version)return;rows=data.recentOrders;const s=data.stats;for(const [label,value]of [[tr('Doanh thu','Revenue'),money(s.totalRevenue)],[tr('Đơn hàng','Orders'),s.totalOrders],[tr('Chờ thanh toán','Awaiting payment'),s.pendingOrders||0],[tr('Tồn kho','Available stock'),s.totalStock]]){const card=el('article',undefined,'metric');card.append(el('p',label),el('strong',value));$('metrics').append(card);}}
- else if(section==='credentials'){products=await api('/products');if(request!==version)return;const selected=$('product').value;$('product').replaceChildren();for(const p of products){const o=el('option',p.name);o.value=p.id;$('product').append(o);}if(products.some(p=>String(p.id)===selected))$('product').value=selected;data=$('product').value?await api('/credentials/'+$('product').value):[];if(request!==version)return;rows=data;}
- else {data=await api('/'+(section==='audit'?'audit-events':section));if(request!==version)return;rows=section==='customers'?data.customers:section==='settings'?Object.entries(data).map(([key,value])=>({key,value})):data;}
- page=1;$('filter').replaceChildren(el('option',tr('Tất cả','All')));$('filter').firstChild.value='';const values=[...new Set(rows.map(r=>r.status||r.product_type).filter(Boolean))];for(const value of values){const o=el('option',value);o.value=value;$('filter').append(o);}$('filter').hidden=!values.length;notice('');render();
- }catch(e){notice(e.message);$('table').replaceChildren(el('p',tr('Không thể tải dữ liệu. Thử lại.','Unable to load data. Please retry.'),'empty'));}}
-function action(cell,label,fn,danger=false){const b=el('button',label,danger?'danger':'');b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){notice(e.message);}finally{b.disabled=false;}};cell.append(b);}
-function render(){const q=$('search').value.toLocaleLowerCase();const filtered=rows.filter(r=>JSON.stringify(r).toLocaleLowerCase().includes(q)&&(!$('filter').value||r.status===$('filter').value||r.product_type===$('filter').value));const pages=Math.max(1,Math.ceil(filtered.length/15));page=Math.min(page,pages);$('table').replaceChildren();if(!filtered.length)$('table').append(el('p',tr('Chưa có dữ liệu phù hợp.','No matching records.'),'empty'));else{const table=el('table');const thead=el('thead'),head=el('tr');for(const col of columns[section]){const th=el('th',col.replaceAll('_',' '));th.scope='col';head.append(th);}head.append(el('th',tr('Thao tác','Actions')));thead.append(head);table.append(thead);const tbody=el('tbody');for(const row of filtered.slice((page-1)*15,page*15)){const r=el('tr');for(const col of columns[section]){const cell=el('td');let value=row[col]??'—';if(['price','total_amount','total_spent'].includes(col))value=money(value);if(col==='status')cell.append(el('span',value,'badge '+(/^[a-z]+$/.test(value)?value:'')));else cell.textContent=value;r.append(cell);}const cell=el('td',undefined,'actions');if(schemas[section]&&section!=='settings'&&!(section==='credentials'&&row.is_sold))action(cell,tr('Sửa','Edit'),()=>openForm(row));if(section==='orders'){
-if(row.status==='pending'){action(cell,tr('Xác nhận TT','Confirm payment'),()=>mutate(row,'confirm'));action(cell,tr('Hủy','Cancel'),()=>mutate(row,'cancel'),true);}
-if(['paid','delivering'].includes(row.status)){action(cell,tr('Giao / thử lại','Deliver / retry'),()=>mutate(row,'resend-credentials'));action(cell,tr('Hoàn tất thủ công','Complete manual'),()=>mutate(row,'mark-delivered'));}
-if(row.status==='delivered')action(cell,tr('Gia hạn','Renew'),async()=>{const days=Number(prompt(tr('Số ngày gia hạn','Renewal days'),'30'));if(Number.isSafeInteger(days)&&days>0){await api('/orders/'+row.order_code+'/set-expiry','POST',{days});await load();}});
+let key = "",
+  lang = "vi",
+  section = "dashboard",
+  rows = [],
+  page = 1,
+  products = [],
+  editing = null,
+  version = 0;
+const labels = {
+  dashboard: ["Tổng quan", "Overview"],
+  orders: ["Đơn hàng", "Orders"],
+  products: ["Sản phẩm", "Products"],
+  categories: ["Danh mục", "Categories"],
+  credentials: ["Kho tài khoản", "Inventory"],
+  discounts: ["Mã giảm giá", "Discounts"],
+  customers: ["Khách hàng", "Customers"],
+  support: ["Hỗ trợ", "Support"],
+  banks: ["Ngân hàng", "Bank accounts"],
+  audit: ["Nhật ký", "Audit log"],
+  settings: ["Cài đặt", "Settings"],
+};
+const tr = (vi, en) => (lang === "vi" ? vi : en);
+const money = (n) =>
+  new Intl.NumberFormat(lang === "vi" ? "vi-VN" : "en-US", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(n) || 0);
+function notice(text) {
+  $("notice").textContent = text;
 }
-if(['products','categories','credentials','discounts'].includes(section))action(cell,tr('Xóa','Delete'),async()=>{if(confirm(tr('Xác nhận xóa mục này?','Delete this item?'))){await api('/'+section+'/'+row.id,'DELETE');await load();}},true);r.append(cell);tbody.append(r);}table.append(tbody);$('table').append(table);}
-$('count').textContent=filtered.length+' '+tr('kết quả','records');$('page').textContent=page+' / '+pages;$('prev').disabled=page===1;$('next').disabled=page===pages;}
-async function mutate(row,verb){if(!confirm(`${verb}: #${row.order_code}?`))return;const result=await api('/orders/'+row.order_code+'/'+verb,'POST',{});await load();notice(result.message||'OK');}
-function openForm(row=null){editing=row;$('fields').replaceChildren();$('form-error').textContent='';$('dialog-title').textContent=(row?tr('Sửa ','Edit '):tr('Thêm ','Add '))+$('title').textContent;const aliases={productType:'product_type',categoryId:'category_id',inviteSlots:'invite_slots',preorderStock:'preorder_stock',subscriptionDays:'subscription_days',warrantyDays:'warranty_days',credentialFields:'credential_fields',customerFields:'customer_fields'};for(const [name,label,type,options]of schemas[section]){const l=el('label',label);l.htmlFor='f-'+name;let input;if(type==='select'){input=el('select');for(const x of options){const o=el('option',x);o.value=x;input.append(o);}}else input=el(type==='json'?'textarea':'input');input.id='f-'+name;input.name=name;if(type==='number'){input.type='number';input.min='0';input.step='1';}let value=row?.[aliases[name]||name]??'';if(section==='settings')value=rows.find(r=>r.key===name)?.value||'';if(type==='json'){if(!value)value=name==='data'?'{}':name==='credentialFields'?'[{"key":"username","label":"Account"},{"key":"password","label":"Password"}]':'[]';if(typeof value!=='string')value=JSON.stringify(value,null,2);}input.value=value|| (type==='select'?options[0]:'');if(['name','price','code','value','data'].includes(name))input.required=true;$('fields').append(l,input);}$('dialog').showModal();}
-$('edit-form').onsubmit=async e=>{e.preventDefault();$('save').disabled=true;try{const body={};for(const [name,,type]of schemas[section]){const value=$('f-'+name).value;if(type==='number'){if(value!=='')body[name]=Number(value);}else if(type==='json')body[name]=JSON.parse(value);else body[name]=value;}if(section==='credentials')body.productId=Number($('product').value);await api('/'+section+(editing?'/'+editing.id:''),section==='settings'||editing?'PUT':'POST',body);$('dialog').close();await load();}catch(e){$('form-error').textContent=e.message;}finally{$('save').disabled=false;}};
-$('add').onclick=()=>openForm();$('close').onclick=()=>$('dialog').close();$('refresh').onclick=load;$('search').oninput=()=>{page=1;render();};$('filter').onchange=()=>{page=1;render();};$('product').onchange=load;$('prev').onclick=()=>{page--;render();};$('next').onclick=()=>{page++;render();};
-localStorage.removeItem('bot_admin_key');
+async function api(path, method = "GET", body) {
+  const r = await fetch("/api/admin" + path, {
+    method,
+    headers: { "Content-Type": "application/json", "x-api-key": key },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await r.json();
+  if (r.status === 401) {
+    logout();
+    throw new Error(tr("Phiên đăng nhập không hợp lệ", "Invalid session"));
+  }
+  if (!r.ok) throw new Error(data.message || "Request failed");
+  return data;
+}
+function logout() {
+  key = "";
+  rows = [];
+  $("key").value = "";
+  $("app").hidden = true;
+  $("login").hidden = false;
+  $("table").replaceChildren();
+  localStorage.removeItem("bot_admin_key");
+}
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  key = $("key").value;
+  $("login-error").textContent = "";
+  try {
+    await api("/dashboard");
+    $("key").value = "";
+    $("login").hidden = true;
+    $("app").hidden = false;
+    drawNav();
+    await load();
+  } catch (e) {
+    $("login-error").textContent = e.message;
+    key = "";
+  }
+});
+$("logout").onclick = logout;
+$("lang").onchange = () => {
+  lang = $("lang").value;
+  document.documentElement.lang = lang;
+  drawNav();
+  load();
+};
+function drawNav() {
+  const nav = $("nav");
+  nav.replaceChildren();
+  for (const [id, text] of Object.entries(labels)) {
+    const b = el("button", text[lang === "vi" ? 0 : 1]);
+    b.setAttribute("aria-current", id === section ? "page" : "false");
+    b.onclick = () => {
+      section = id;
+      page = 1;
+      $("search").value = "";
+      drawNav();
+      load();
+    };
+    nav.append(b);
+  }
+  if (innerWidth < 1000) {
+    const b = el("button", tr("Đăng xuất", "Sign out"));
+    b.onclick = logout;
+    nav.append(b);
+  }
+}
+const schemas = {
+  products: [
+    ["name", "Tên / Name"],
+    ["price", "Giá VND / Price", "number"],
+    ["description", "Mô tả / Description"],
+    [
+      "productType",
+      "Loại / Type",
+      "select",
+      ["credential", "invite", "preorder"],
+    ],
+    ["categoryId", "Category ID", "number"],
+    ["inviteSlots", "Invite slots", "number"],
+    ["preorderStock", "Preorder stock", "number"],
+    ["subscriptionDays", "Subscription days", "number"],
+    ["warrantyDays", "Warranty days", "number"],
+    ["credentialFields", "Credential fields JSON", "json"],
+    ["customerFields", "Customer fields JSON", "json"],
+  ],
+  categories: [
+    ["name", "Tên / Name"],
+    ["emoji", "Emoji"],
+  ],
+  credentials: [["data", "Dữ liệu tài khoản JSON / Credential JSON", "json"]],
+  discounts: [
+    ["code", "Mã / Code"],
+    ["type", "Loại / Type", "select", ["percent", "fixed"]],
+    ["value", "Giá trị / Value", "number"],
+    ["max_uses", "Lượt tối đa / Maximum uses", "number"],
+    ["max_uses_per_user", "Maximum uses per customer", "number"],
+    ["expires_at", "Expires at (ISO date)"],
+  ],
+  banks: [
+    ["bank_id", "Bank ID"],
+    ["bank_code", "Bank code"],
+    ["bank_name", "Bank name"],
+    ["account_no", "Account number"],
+    ["account_name", "Account name"],
+  ],
+  settings: [
+    ["checker_enabled", "Link checker enabled (0/1)"],
+    ["checker_daily_quota", "Daily quota"],
+    ["checker_max_batch", "Batch size"],
+  ],
+};
+const columns = {
+  dashboard: [
+    "order_code",
+    "product_name",
+    "total_amount",
+    "status",
+    "created_at",
+  ],
+  orders: [
+    "order_code",
+    "product_name",
+    "telegram_user_id",
+    "total_amount",
+    "status",
+    "created_at",
+  ],
+  products: ["id", "name", "price", "product_type", "available", "sold"],
+  categories: ["id", "name", "emoji", "product_count"],
+  credentials: ["id", "is_sold", "order_id"],
+  discounts: ["code", "type", "value", "used_count", "max_uses"],
+  customers: [
+    "telegram_user_id",
+    "telegram_username",
+    "total_orders",
+    "total_spent",
+  ],
+  support: ["id", "order_code", "user_id", "message", "status"],
+  banks: ["id", "bank_name", "account_no", "account_name", "is_active"],
+  audit: ["created_at", "actor", "action", "target", "outcome"],
+  settings: ["key", "value"],
+};
+async function load() {
+  const request = ++version;
+  notice(tr("Đang tải…", "Loading…"));
+  $("add").hidden = !schemas[section];
+  $("add").textContent =
+    section === "settings"
+      ? tr("Sửa cài đặt", "Edit settings")
+      : tr("+ Thêm", "+ Add");
+  $("metrics").replaceChildren();
+  $("product").hidden = section !== "credentials";
+  $("title").textContent = labels[section][lang === "vi" ? 0 : 1];
+  $("table-title").textContent =
+    section === "dashboard"
+      ? tr("Đơn hàng gần đây", "Recent orders")
+      : $("title").textContent;
+  $("subtitle").textContent = tr(
+    "Quản lý hoạt động cửa hàng của bạn.",
+    "Manage your shop operations.",
+  );
+  try {
+    let data;
+    if (section === "dashboard") {
+      data = await api("/dashboard");
+      if (request !== version) return;
+      rows = data.recentOrders;
+      const s = data.stats;
+      for (const [label, value] of [
+        [tr("Doanh thu", "Revenue"), money(s.totalRevenue)],
+        [tr("Đơn hàng", "Orders"), s.totalOrders],
+        [tr("Chờ thanh toán", "Awaiting payment"), s.pendingOrders || 0],
+        [tr("Tồn kho", "Available stock"), s.totalStock],
+      ]) {
+        const card = el("article", undefined, "metric");
+        card.append(el("p", label), el("strong", value));
+        $("metrics").append(card);
+      }
+    } else if (section === "credentials") {
+      products = await api("/products");
+      if (request !== version) return;
+      const selected = $("product").value;
+      $("product").replaceChildren();
+      for (const p of products) {
+        const o = el("option", p.name);
+        o.value = p.id;
+        $("product").append(o);
+      }
+      if (products.some((p) => String(p.id) === selected))
+        $("product").value = selected;
+      data = $("product").value
+        ? await api("/credentials/" + $("product").value)
+        : [];
+      if (request !== version) return;
+      rows = data;
+    } else {
+      data = await api(
+        "/" +
+          (section === "audit"
+            ? "audit-events"
+            : section === "banks"
+              ? "bank-accounts"
+              : section),
+      );
+      if (request !== version) return;
+      rows =
+        section === "customers"
+          ? data.customers
+          : section === "settings"
+            ? Object.entries(data).map(([key, value]) => ({ key, value }))
+            : data;
+    }
+    page = 1;
+    $("filter").replaceChildren(el("option", tr("Tất cả", "All")));
+    $("filter").firstChild.value = "";
+    const values = [
+      ...new Set(rows.map((r) => r.status || r.product_type).filter(Boolean)),
+    ];
+    for (const value of values) {
+      const o = el("option", value);
+      o.value = value;
+      $("filter").append(o);
+    }
+    $("filter").hidden = !values.length;
+    notice("");
+    render();
+  } catch (e) {
+    notice(e.message);
+    $("table").replaceChildren(
+      el(
+        "p",
+        tr(
+          "Không thể tải dữ liệu. Thử lại.",
+          "Unable to load data. Please retry.",
+        ),
+        "empty",
+      ),
+    );
+  }
+}
+function action(cell, label, fn, danger = false) {
+  const b = el("button", label, danger ? "danger" : "");
+  b.onclick = async () => {
+    b.disabled = true;
+    try {
+      await fn();
+    } catch (e) {
+      notice(e.message);
+    } finally {
+      b.disabled = false;
+    }
+  };
+  cell.append(b);
+}
+function render() {
+  const q = $("search").value.toLocaleLowerCase();
+  const filtered = rows.filter(
+    (r) =>
+      JSON.stringify(r).toLocaleLowerCase().includes(q) &&
+      (!$("filter").value ||
+        r.status === $("filter").value ||
+        r.product_type === $("filter").value),
+  );
+  const pages = Math.max(1, Math.ceil(filtered.length / 15));
+  page = Math.min(page, pages);
+  $("table").replaceChildren();
+  if (!filtered.length)
+    $("table").append(
+      el("p", tr("Chưa có dữ liệu phù hợp.", "No matching records."), "empty"),
+    );
+  else {
+    const table = el("table");
+    const thead = el("thead"),
+      head = el("tr");
+    for (const col of columns[section]) {
+      const th = el("th", col.replaceAll("_", " "));
+      th.scope = "col";
+      head.append(th);
+    }
+    head.append(el("th", tr("Thao tác", "Actions")));
+    thead.append(head);
+    table.append(thead);
+    const tbody = el("tbody");
+    for (const row of filtered.slice((page - 1) * 15, page * 15)) {
+      const r = el("tr");
+      for (const col of columns[section]) {
+        const cell = el("td");
+        let value = row[col] ?? "—";
+        if (["price", "total_amount", "total_spent"].includes(col))
+          value = money(value);
+        if (col === "status")
+          cell.append(
+            el("span", value, "badge " + (/^[a-z]+$/.test(value) ? value : "")),
+          );
+        else cell.textContent = value;
+        r.append(cell);
+      }
+      const cell = el("td", undefined, "actions");
+      if (
+        schemas[section] &&
+        section !== "settings" &&
+        section !== "banks" &&
+        !(section === "credentials" && row.is_sold)
+      )
+        action(cell, tr("Sửa", "Edit"), () => openForm(row));
+      if (section === "support")
+        action(cell, tr("Giải quyết", "Resolve"), async () => {
+          await api("/support/" + row.id, "PUT", { status: "resolved" });
+          await load();
+        });
+      if (section === "banks")
+        action(cell, tr("Kích hoạt", "Activate"), async () => {
+          if (confirm("Activate " + row.account_no + "?")) {
+            await api("/bank-accounts/" + row.id + "/activate", "POST", {});
+            await load();
+          }
+        });
+      if (section === "orders") {
+        if (row.status === "pending") {
+          action(cell, tr("Xác nhận TT", "Confirm payment"), () =>
+            mutate(row, "confirm"),
+          );
+          action(cell, tr("Hủy", "Cancel"), () => mutate(row, "cancel"), true);
+        }
+        if (["paid", "delivering"].includes(row.status)) {
+          action(cell, tr("Giao / thử lại", "Deliver / retry"), () =>
+            mutate(row, "resend-credentials"),
+          );
+          action(cell, tr("Hoàn tất thủ công", "Complete manual"), () =>
+            mutate(row, "mark-delivered"),
+          );
+        }
+        if (row.status === "delivered")
+          action(cell, tr("Gia hạn", "Renew"), async () => {
+            const days = Number(
+              prompt(tr("Số ngày gia hạn", "Renewal days"), "30"),
+            );
+            if (Number.isSafeInteger(days) && days > 0) {
+              await api("/orders/" + row.order_code + "/set-expiry", "POST", {
+                days,
+              });
+              await load();
+            }
+          });
+      }
+      if (
+        ["products", "categories", "credentials", "discounts"].includes(section)
+      )
+        action(
+          cell,
+          tr("Xóa", "Delete"),
+          async () => {
+            if (confirm(tr("Xác nhận xóa mục này?", "Delete this item?"))) {
+              await api("/" + section + "/" + row.id, "DELETE");
+              await load();
+            }
+          },
+          true,
+        );
+      r.append(cell);
+      tbody.append(r);
+    }
+    table.append(tbody);
+    $("table").append(table);
+  }
+  $("count").textContent = filtered.length + " " + tr("kết quả", "records");
+  $("page").textContent = page + " / " + pages;
+  $("prev").disabled = page === 1;
+  $("next").disabled = page === pages;
+}
+async function mutate(row, verb) {
+  if (!confirm(`${verb}: #${row.order_code}?`)) return;
+  const result = await api(
+    "/orders/" + row.order_code + "/" + verb,
+    "POST",
+    {},
+  );
+  await load();
+  notice(result.message || "OK");
+}
+function openForm(row = null) {
+  editing = row;
+  $("fields").replaceChildren();
+  $("form-error").textContent = "";
+  $("dialog-title").textContent =
+    (row ? tr("Sửa ", "Edit ") : tr("Thêm ", "Add ")) + $("title").textContent;
+  const aliases = {
+    productType: "product_type",
+    categoryId: "category_id",
+    inviteSlots: "invite_slots",
+    preorderStock: "preorder_stock",
+    subscriptionDays: "subscription_days",
+    warrantyDays: "warranty_days",
+    credentialFields: "credential_fields",
+    customerFields: "customer_fields",
+  };
+  for (const [name, label, type, options] of schemas[section]) {
+    const l = el("label", label);
+    l.htmlFor = "f-" + name;
+    let input;
+    if (type === "select") {
+      input = el("select");
+      for (const x of options) {
+        const o = el("option", x);
+        o.value = x;
+        input.append(o);
+      }
+    } else input = el(type === "json" ? "textarea" : "input");
+    input.id = "f-" + name;
+    input.name = name;
+    if (type === "number") {
+      input.type = "number";
+      input.min = "0";
+      input.step = "1";
+    }
+    let value = row?.[aliases[name] || name] ?? "";
+    if (section === "settings")
+      value = rows.find((r) => r.key === name)?.value || "";
+    if (type === "json") {
+      if (!value)
+        value =
+          name === "data"
+            ? "{}"
+            : name === "credentialFields"
+              ? '[{"key":"username","label":"Account"},{"key":"password","label":"Password"}]'
+              : "[]";
+      if (typeof value !== "string") value = JSON.stringify(value, null, 2);
+    }
+    input.value = value || (type === "select" ? options[0] : "");
+    if (["name", "price", "code", "value", "data"].includes(name))
+      input.required = true;
+    $("fields").append(l, input);
+  }
+  $("dialog").showModal();
+}
+$("edit-form").onsubmit = async (e) => {
+  e.preventDefault();
+  $("save").disabled = true;
+  try {
+    const body = {};
+    for (const [name, , type] of schemas[section]) {
+      const value = $("f-" + name).value;
+      if (type === "number") {
+        if (value !== "") body[name] = Number(value);
+      } else if (type === "json") body[name] = JSON.parse(value);
+      else body[name] = value;
+    }
+    if (section === "credentials") body.productId = Number($("product").value);
+    await api(
+      "/" +
+        (section === "banks" ? "bank-accounts" : section) +
+        (editing ? "/" + editing.id : ""),
+      section === "settings" || editing ? "PUT" : "POST",
+      body,
+    );
+    $("dialog").close();
+    await load();
+  } catch (e) {
+    $("form-error").textContent = e.message;
+  } finally {
+    $("save").disabled = false;
+  }
+};
+$("add").onclick = () => openForm();
+$("close").onclick = () => $("dialog").close();
+$("refresh").onclick = load;
+$("search").oninput = () => {
+  page = 1;
+  render();
+};
+$("filter").onchange = () => {
+  page = 1;
+  render();
+};
+$("product").onchange = load;
+$("prev").onclick = () => {
+  page--;
+  render();
+};
+$("next").onclick = () => {
+  page++;
+  render();
+};
+localStorage.removeItem("bot_admin_key");

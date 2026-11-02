@@ -17,3 +17,8 @@ CREATE INDEX IF NOT EXISTS idx_credentials_stock ON credentials(product_id,is_so
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status,created_at);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (3);
+CREATE TABLE IF NOT EXISTS order_payment_accounts (order_code TEXT PRIMARY KEY, account_no TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS support_tickets (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, order_code TEXT NOT NULL, user_id INTEGER NOT NULL,
+ message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT DEFAULT (datetime('now'))
+);

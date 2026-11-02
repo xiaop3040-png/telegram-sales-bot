@@ -15,6 +15,16 @@ function setupAdminAPI(app, bot) {
         res.json(result);
     });
 
+    app.get('/api/admin/support', (req,res) => {
+        const stmt=db.getDb().prepare('SELECT * FROM support_tickets ORDER BY id DESC LIMIT 1000');
+        const rows=[];try {while(stmt.step())rows.push(stmt.getAsObject());}finally{stmt.free();}res.json(rows);
+    });
+    app.put('/api/admin/support/:id', (req,res) => {
+        if(!['open','resolved'].includes(req.body.status))return res.status(400).json({message:'Invalid status'});
+        db.atomic(()=>db.getDb().run('UPDATE support_tickets SET status=? WHERE id=?',[req.body.status,Number(req.params.id)]));
+        res.json({message:'Updated'});
+    });
+
     // ==================== Dashboard ====================
 
     app.get('/api/admin/dashboard', (req, res) => {
@@ -816,8 +826,9 @@ function setupAdminAPI(app, bot) {
             if (!days || days <= 0) {
                 return res.status(400).json({ error: true, message: 'Days must be > 0', code: 'VALIDATION_ERROR' });
             }
-            const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + parseInt(days));
+            if (!Number.isSafeInteger(Number(days)) || Number(days)>3650) return res.status(400).json({message:'Invalid days'});
+            const expiresAt = new Date(Math.max(Date.now(),Date.parse(order.subscription_expires_at)||0));
+            expiresAt.setDate(expiresAt.getDate() + Number(days));
             const expiresStr = expiresAt.toISOString().split('T')[0];
             db.setOrderExpiryDate(req.params.code, expiresStr);
             res.json({ message: `Đã set hết hạn: ${expiresStr}`, expiresAt: expiresStr });

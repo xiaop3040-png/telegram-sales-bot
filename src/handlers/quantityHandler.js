@@ -76,7 +76,7 @@ function setupQuantityHandler(bot) {
 
         waitingForQuantity.delete(userId);
 
-        if (isNaN(quantity) || quantity <= 0) {
+        if (!Number.isSafeInteger(quantity) || quantity <= 0 || quantity > 999) {
             const lang = getLang(userId, db.getUserLanguage);
             bot.sendMessage(msg.chat.id, t('invalid_quantity', lang, { max: 999 }));
             return;
@@ -161,6 +161,7 @@ function showBuyOrCartChoice(bot, chatId, messageId, productId, quantity, fromUs
     if (!product) return;
 
     const lang = getLang(fromUser.id, db.getUserLanguage);
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999) return;
     const total = product.price * quantity;
 
     let text = `📦 **${product.name}**\n`;

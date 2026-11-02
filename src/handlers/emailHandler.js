@@ -104,6 +104,7 @@ function startInfoCollection(bot, data) {
 
     const qty = quantity || 1;
     const fields = JSON.parse(product.customer_fields || '[{"key":"email","label":"Email","type":"email"}]');
+    if (!fields.length) { bot.emit('quantity_selected',data); return; }
 
     waitingForInfo.set(userId, {
         pending: data,
@@ -151,7 +152,7 @@ function askNextField(bot, chatId, state) {
     if (filledKeys.length > 0) {
         const progress = filledKeys.map(k => {
             const f = state.fields.find(ff => ff.key === k);
-            return `  ✅ ${f ? f.label : k}: ${state.currentUnit[k]}`;
+            return `  ✅ ${f ? f.label : k}: ${/pass|secret|token/i.test(k) ? '••••••' : state.currentUnit[k]}`;
         }).join('\n');
         prompt = progress + '\n\n' + prompt;
     }

@@ -98,8 +98,9 @@ function setupDiscountHandler(bot) {
         const product = db.getProductById(state.pending.productId);
         if (!product) return;
 
-        const orderAmount = product.price * state.pending.quantity;
-        const result = db.validateDiscountCode(code, userId, orderAmount, state.pending.productId, state.pending.quantity, product.price);
+        const orderAmount = state.pending.items ? state.pending.items.reduce((sum,i)=>sum+i.subtotal,0) : product.price * state.pending.quantity;
+        const result = db.validateDiscountCode(code, userId, orderAmount, state.pending.productId, state.pending.items ? 1 : state.pending.quantity, state.pending.items ? orderAmount : product.price);
+        if (state.pending.items?.length > 1 && result.valid && db.getDiscountApplicableProducts(result.discount).length) { result.valid=false; result.reason='Mã theo sản phẩm: vui lòng mua riêng / Product discount: use separate checkout'; }
 
         if (!result.valid) {
             sendDiscountError(bot, query.message.chat.id, result.reason);
@@ -107,6 +108,12 @@ function setupDiscountHandler(bot) {
         }
 
         const { discount, discountAmount } = result;
+        if (discount.required_group_id) {
+            try {
+                const member = await bot.getChatMember(discount.required_group_id,userId);
+                if (!['member','administrator','creator'].includes(member.status)) throw new Error('Not member');
+            } catch { sendDiscountError(bot,query.message.chat.id,'Group membership required'); return; }
+        }
         const lang = getLang(userId, db.getUserLanguage);
         const finalAmount = orderAmount - discountAmount;
         const discountLabel = discount.type === 'percent'
@@ -144,9 +151,10 @@ function setupDiscountHandler(bot) {
 
         const code = msg.text.trim().toUpperCase();
         const product = db.getProductById(state.pending.productId);
-        const orderAmount = product.price * state.pending.quantity;
+        const orderAmount = state.pending.items ? state.pending.items.reduce((sum,i)=>sum+i.subtotal,0) : product.price * state.pending.quantity;
 
-        const result = db.validateDiscountCode(code, userId, orderAmount, state.pending.productId, state.pending.quantity, product.price);
+        const result = db.validateDiscountCode(code, userId, orderAmount, state.pending.productId, state.pending.items ? 1 : state.pending.quantity, state.pending.items ? orderAmount : product.price);
+        if (state.pending.items?.length > 1 && result.valid && db.getDiscountApplicableProducts(result.discount).length) { result.valid=false; result.reason='Mã theo sản phẩm: vui lòng mua riêng / Product discount: use separate checkout'; }
 
         if (!result.valid) {
             sendDiscountError(bot, msg.chat.id, result.reason);
