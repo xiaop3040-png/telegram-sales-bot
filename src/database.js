@@ -336,7 +336,16 @@ async function initDatabase() {
 function saveDatabase() {
     if (!db) return;
     const data = db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
+    // Write a complete snapshot before replacing the database file.
+    // A failed write must not truncate the last known-good database.
+    const tempPath = DB_PATH + '.tmp';
+    try {
+        fs.writeFileSync(tempPath, Buffer.from(data), { mode: 0o600 });
+        fs.renameSync(tempPath, DB_PATH);
+    } catch (err) {
+        try { fs.unlinkSync(tempPath); } catch (_) { /* best effort */ }
+        throw err;
+    }
 }
 
 function getDb() {
@@ -2050,6 +2059,8 @@ function createOrderWithItems(params, items) {
     const orderCode = generateOrderCode();
     const primaryItem = items[0] || {};
 
+    db.run('BEGIN IMMEDIATE TRANSACTION');
+    try {
     db.run(
         `INSERT INTO orders (
       order_code, telegram_user_id, telegram_username,
@@ -2085,6 +2096,11 @@ function createOrderWithItems(params, items) {
         );
     }
 
+    db.run('COMMIT');
+    } catch (err) {
+        db.run('ROLLBACK');
+        throw err;
+    }
     saveDatabase();
     return orderCode;
 }
